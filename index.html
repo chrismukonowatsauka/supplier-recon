@@ -1,0 +1,995 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Supplier Reconciliation</title>
+<meta name="description" content="Reconcile a supplier statement to the creditors ledger and export the working to Excel.">
+<style>
+:root {
+  --ink: #000;
+  --text: #1a1a1a;
+  --muted: #666;
+  --line: #d9d9d9;
+  --soft: #f3f3f3;
+  --font: -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+  color-scheme: light;
+}
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body { margin: 0; background: #fff; color: var(--text); font: 15px/1.5 var(--font); }
+.wrap { max-width: 1040px; margin: 0 auto; padding: 0 20px; }
+button, input, select, textarea { font: inherit; color: inherit; }
+
+/* header */
+.top { border-bottom: 2px solid var(--ink); }
+.top .wrap { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding-top: 22px; padding-bottom: 16px; }
+h1 { margin: 0; font-size: 22px; font-weight: 700; letter-spacing: -0.01em; color: var(--ink); }
+.sub { margin: 2px 0 0; color: var(--muted); font-size: 14px; }
+h2 { margin: 0; font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--ink); }
+
+/* buttons */
+.btn { display: inline-flex; align-items: center; justify-content: center; min-height: 40px; padding: 8px 18px; border: 1px solid var(--ink); background: #fff; color: var(--ink); font-weight: 600; font-size: 14px; cursor: pointer; border-radius: 0; text-decoration: none; }
+.btn:hover { background: var(--soft); }
+.btn.primary { background: var(--ink); color: #fff; }
+.btn.primary:hover { background: #333; }
+.btn:disabled { opacity: 0.4; cursor: default; }
+.btn:focus-visible, .link:focus-visible, textarea:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+.link { background: none; border: 0; padding: 0; color: var(--ink); text-decoration: underline; cursor: pointer; font-size: 14px; }
+#helpBtn { animation: nudge 1.2s steps(1, end) infinite; }
+#helpBtn[aria-expanded="true"] { animation: none; }
+@media (prefers-reduced-motion: reduce) { #helpBtn { animation-duration: 3s; } }
+@keyframes nudge { 0% { background: #fff; color: var(--ink); } 50% { background: var(--ink); color: #fff; } }
+
+/* sections */
+section { padding: 26px 0; border-bottom: 1px solid var(--line); }
+section:last-of-type { border-bottom: 0; }
+.sechead { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 14px; flex-wrap: wrap; }
+
+/* inputs */
+.inputs { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 20px; }
+.panel { border: 1px solid var(--ink); padding: 16px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; align-content: start; min-width: 0; }
+.panel > * { min-width: 0; }
+.panel.drag { background: var(--soft); outline: 2px dashed var(--ink); outline-offset: -6px; }
+.panel .ph { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
+.panel textarea { width: 100%; height: 132px; resize: vertical; border: 1px dashed #999; padding: 10px; font-size: 13px; background: #fff; }
+.panel textarea::placeholder { color: #888; }
+.loaded { display: flex; justify-content: space-between; align-items: center; gap: 10px; border: 1px solid var(--line); background: var(--soft); padding: 10px 12px; font-size: 14px; }
+.loaded b { font-weight: 600; }
+.field { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 14px; }
+.field input { width: 150px; max-width: 55%; border: 1px solid #999; padding: 7px 9px; text-align: right; font-variant-numeric: tabular-nums; border-radius: 0; }
+.warn { font-size: 13px; color: var(--ink); background: var(--soft); border-left: 3px solid var(--ink); padding: 6px 10px; }
+details.cols summary { cursor: pointer; font-size: 13px; color: var(--muted); }
+.mapgrid { overflow-x: auto; margin-top: 8px; max-width: 100%; -webkit-overflow-scrolling: touch; }
+details.cols { min-width: 0; max-width: 100%; }
+.mapgrid table { border-collapse: collapse; font-size: 12px; }
+.mapgrid th, .mapgrid td { border: 1px solid var(--line); padding: 4px 6px; white-space: nowrap; max-width: 180px; overflow: hidden; text-overflow: ellipsis; text-align: left; }
+.mapgrid select { font-size: 12px; border: 1px solid #999; border-radius: 0; padding: 2px; }
+.mapgrid td.off { color: #aaa; }
+.actions { display: flex; gap: 12px; align-items: center; padding: 20px 0 0; }
+.filebtn { position: relative; overflow: hidden; }
+.filebtn input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+
+/* reconciliation statement */
+.summary { margin: 0 0 14px; font-size: 14px; color: var(--muted); }
+table.stmt { width: 100%; border-collapse: collapse; font-size: 14px; font-variant-numeric: tabular-nums; }
+.stmt th { text-align: left; font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); font-weight: 600; border-bottom: 1px solid var(--ink); padding: 6px 8px; }
+.stmt td { padding: 5px 8px; vertical-align: top; }
+.stmt .n { text-align: right; white-space: nowrap; }
+.stmt .dt { white-space: nowrap; color: var(--muted); width: 1%; }
+.stmt th.n { width: 1%; }
+.stmt .ref { display: block; font-size: 12px; color: var(--muted); }
+.stmt tr.k-balance td { font-weight: 700; padding-top: 10px; }
+.stmt tr.k-heading td { font-weight: 700; background: var(--soft); padding-top: 7px; padding-bottom: 7px; }
+.stmt tr.k-item td:first-child { padding-left: 20px; }
+.stmt tr.k-subtotal td { color: var(--muted); font-style: italic; }
+.stmt tr.k-subtotal td.tot { font-style: normal; color: var(--text); border-top: 1px solid var(--ink); }
+.stmt tr.k-closing td { font-weight: 700; border-top: 1px solid var(--line); padding-top: 10px; }
+.stmt tr.k-final td { font-weight: 700; }
+.stmt tr.k-final td.tot { border-top: 1px solid var(--ink); border-bottom: 3px double var(--ink); }
+.stmt tr.k-final.off td { background: var(--soft); }
+.status { display: inline-block; margin-left: 8px; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; }
+
+/* about + footer */
+.about p { margin: 8px 0 0; max-width: 720px; color: var(--text); font-size: 14px; }
+footer { border-top: 2px solid var(--ink); margin-top: 8px; }
+footer .wrap { padding-top: 14px; padding-bottom: 28px; font-size: 13px; color: var(--muted); }
+footer a { color: var(--ink); }
+
+/* help panel */
+.help { position: fixed; top: 0; right: 0; bottom: 0; width: min(420px, 100%); background: #fff; border-left: 2px solid var(--ink); z-index: 20; overflow-y: auto; padding: 22px 24px 40px; }
+.help[hidden] { display: none; }
+.help .ht { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+.help h3 { font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; margin: 22px 0 6px; color: var(--ink); }
+.help p, .help li { font-size: 14px; }
+.help ol, .help ul { padding-left: 18px; margin: 0; display: grid; gap: 5px; }
+.help p { margin: 0 0 6px; }
+.demo { margin-top: 22px; border-top: 1px solid var(--line); padding-top: 14px; }
+.toast { position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); background: var(--ink); color: #fff; padding: 8px 16px; font-size: 14px; z-index: 30; }
+.toast:empty { display: none; }
+
+/* tablets and phones */
+@media (max-width: 760px) {
+  .inputs, .inputs.four { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 560px) {
+  body { font-size: 14px; }
+  .wrap { padding: 0 14px; }
+  h1 { font-size: 19px; }
+  .sub { font-size: 13px; }
+  section { padding: 20px 0; }
+  .panel { padding: 12px; }
+  .actions .btn, .sechead .btn { flex: 1; }
+  .sechead h2 { width: 100%; }
+  .stmt td { padding: 5px 4px; }
+  .stmt tr.k-item td:first-child { padding-left: 10px; }
+  table.stmt { font-size: 13px; }
+}
+@media print {
+  .top .btn, .inputs, .actions, .sechead .btn, .about, .help { display: none !important; }
+}
+
+/* key figures and review lists */
+table.kv, table.list { width: 100%; border-collapse: collapse; font-size: 14px; font-variant-numeric: tabular-nums; }
+.kv th, .list th { text-align: left; font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); font-weight: 600; border-bottom: 1px solid var(--ink); padding: 6px 8px; }
+.kv td, .list td { padding: 6px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+.kv .n, .list .n { text-align: right; white-space: nowrap; }
+.kv tr.flag td, .list tr.flag td { font-weight: 700; background: var(--soft); }
+.list td.d { white-space: nowrap; width: 1%; }
+.subsec { margin-top: 26px; }
+.subsec h3 { font-size: 13px; text-transform: uppercase; letter-spacing: 0.06em; margin: 0 0 10px; }
+.panel select { width: 100%; border: 1px solid #999; padding: 7px 9px; border-radius: 0; background: #fff; }
+.panel .opt { font-weight: 400; color: var(--muted); text-transform: none; letter-spacing: 0; }
+.panel .note { font-size: 13px; color: var(--muted); margin: 0; }
+@media (max-width: 560px) { .list td, .kv td { padding: 6px 4px; } .list, .kv { font-size: 13px; } }
+</style>
+</head>
+<body>
+<header class="top"><div class="wrap">
+  <div><h1>Supplier Reconciliation</h1><p class="sub">Supplier statement against the creditors ledger</p></div>
+  <button type="button" class="btn" id="helpBtn" aria-expanded="false" aria-controls="help">Help</button>
+</div></header>
+
+<main class="wrap">
+  <section>
+    <div class="inputs">
+      <div class="panel" id="panelS">
+        <div class="ph"><h2>Supplier statement</h2><label class="link filebtn">Upload file<input type="file" id="fileS" accept=".csv,.txt,.tsv,.xlsx,.xls"></label></div>
+        <div id="boxS"></div>
+        <label class="field">Opening balance<input id="openS" inputmode="decimal" placeholder="0.00"></label>
+      </div>
+      <div class="panel" id="panelL">
+        <div class="ph"><h2>Creditors ledger</h2><label class="link filebtn">Upload file<input type="file" id="fileL" accept=".csv,.txt,.tsv,.xlsx,.xls"></label></div>
+        <div id="boxL"></div>
+        <label class="field">Opening balance<input id="openL" inputmode="decimal" placeholder="0.00"></label>
+      </div>
+    </div>
+    <div class="actions"><button type="button" class="btn primary" id="runBtn">Reconcile</button><button type="button" class="btn" id="clearBtn">Clear</button></div>
+  </section>
+
+  <section id="result" hidden>
+    <div class="sechead"><h2>Reconciliation statement</h2><button type="button" class="btn" id="xlsxBtn">Export to Excel</button></div>
+    <p class="summary" id="summary"></p>
+    <table class="stmt" id="stmtTable"></table>
+  </section>
+
+  <section class="about">
+    <h2>About</h2>
+    <p>This tool reconciles a supplier's statement to the creditors ledger. It matches invoices, credit notes and payments, then lists what explains the difference: missing or duplicated invoices, wrong invoice numbers, keying errors, invoices captured in parts, and payments in transit.</p>
+    <p>Everything runs in your browser. Nothing you paste or upload leaves your device.</p>
+  </section>
+</main>
+
+<footer><div class="wrap">Built by Chris Mukonowatsauka · <a href="https://linkedin.com/in/cmkn" target="_blank" rel="noopener">linkedin.com/in/cmkn</a></div></footer>
+
+<aside class="help" id="help" hidden aria-labelledby="helpTitle">
+  <div class="ht"><h2 id="helpTitle">How to use it</h2><button type="button" class="btn" id="helpClose">Close</button></div>
+  <ol>
+    <li>Copy the supplier statement from Excel, a CSV or a PDF and paste it into the first box. You can also drag an Excel or CSV file onto the box, or use Upload file.</li>
+    <li>Do the same with the supplier's account from your creditors ledger.</li>
+    <li>Enter each opening balance, if the extracts don't start at zero.</li>
+    <li>Select Reconcile. The Excel working file downloads by itself; Export to Excel downloads it again.</li>
+    <li>Clear empties both sides to start the next supplier.</li>
+  </ol>
+  <h3>Columns</h3>
+  <p>Date, reference, details, and amount (or debit and credit) are found automatically. If one is read wrongly, open Columns under the box and change it. Your choice is remembered next time.</p>
+  <h3>The reconciliation statement</h3>
+  <p>It starts from the balance per the supplier statement, lists every item that explains the difference under its heading, and ends at the balance per the ledger. The unexplained difference should be zero.</p>
+  <h3>What it picks up</h3>
+  <ul>
+    <li>Invoices and credit notes missing from either side</li>
+    <li>Duplicate postings</li>
+    <li>Wrong or transposed invoice numbers and amounts</li>
+    <li>Invoices captured in parts, and postings that were reversed</li>
+    <li>Invoice numbers written in the description instead of the reference</li>
+    <li>Payments in transit and payments missing from either side</li>
+  </ul>
+  <h3>The Excel export</h3>
+  <p>Three sheets: the reconciliation statement, every ledger line and every statement line, each with its status, what it was matched to, and any difference. Items flagged "Check this match" share an amount but no invoice number. Confirm them in the file.</p>
+  <div class="demo"><button type="button" class="link" id="demoBtn">Try a demo</button> <span class="sub">loads a fictional statement and ledger.</span></div>
+</aside>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
+<script>
+// Styled Excel export shared by the bank and supplier apps. Needs ExcelJS.
+var RecXlsx = (function () {
+  var FONT = { name: "Arial", size: 10 };
+  var NUM = "#,##0.00;(#,##0.00);\"-\"";
+  var DARK = "FF1A1A1A", GREY = "FFF2F2F2";
+  function toDate(ms) { return ms == null ? null : new Date(ms); }
+  function header(ws, cols) {
+    var r = ws.addRow(cols.map(function (c) { return c.h; }));
+    r.eachCell(function (c) {
+      c.font = Object.assign({}, FONT, { bold: true, color: { argb: "FFFFFFFF" } });
+      c.fill = { type: "pattern", pattern: "solid", fgColor: { argb: DARK } };
+      c.alignment = { vertical: "middle", horizontal: cols[c.col - 1].num ? "right" : "left", wrapText: true };
+    });
+    r.height = 20;
+    return r;
+  }
+  function widths(ws, cols, rows) {
+    cols.forEach(function (c, i) {
+      var w = String(c.h).length;
+      rows.forEach(function (r) {
+        var v = r[i]; if (v == null) return;
+        var len = v instanceof Date ? 10 : typeof v === "number" ? (Math.abs(v).toFixed(2).length + Math.floor(Math.log10(Math.abs(v) + 1) / 3) + 2) : String(v).length;
+        if (len > w) w = len;
+      });
+      ws.getColumn(i + 1).width = Math.min(Math.max(w + 2, c.min || 8), c.max || 60);
+    });
+  }
+
+  // spec: { title, subtitle, recon: [{kind, label, date, ref, amount}], sheets: [{name, gl, rows: [{date, ref, desc, gl, amount, status, note, mref, mamt, diff}]}] }
+  function build(ExcelJS, spec) {
+    var wb = new ExcelJS.Workbook();
+    wb.creator = "Reconciliation app"; wb.created = new Date();
+
+    // Sheet 1: the reconciliation statement
+    var ws = wb.addWorksheet("Reconciliation", { views: [{ state: "frozen", ySplit: 4, showGridLines: false }] });
+    var cols = [{ h: "Description", min: 34, max: 70 }, { h: "Date", min: 12 }, { h: "Reference", min: 14, max: 28 }, { h: "Amount", num: true, min: 14 }, { h: "Total", num: true, min: 16 }];
+    ws.addRow([spec.title]).getCell(1).font = Object.assign({}, FONT, { bold: true, size: 14 });
+    ws.addRow([spec.subtitle]).getCell(1).font = Object.assign({}, FONT, { color: { argb: "FF595959" } });
+    ws.addRow([]);
+    header(ws, cols);
+    var vals = [];
+    spec.recon.forEach(function (x) {
+      var row;
+      if (x.kind === "item") row = ws.addRow(["    " + (x.label || ""), toDate(x.date), x.ref || "", x.amount / 100, null]);
+      else if (x.kind === "heading") row = ws.addRow([x.label]);
+      else if (x.kind === "blank") row = ws.addRow([]);
+      else row = ws.addRow([x.label, null, null, null, x.amount / 100]);
+      vals.push(row.values.slice(1));
+      row.eachCell({ includeEmpty: true }, function (c) { c.font = Object.assign({}, FONT); });
+      row.getCell(2).numFmt = "dd/mm/yyyy"; row.getCell(4).numFmt = NUM; row.getCell(5).numFmt = NUM;
+      row.getCell(2).alignment = { horizontal: "left" };
+      if (x.kind === "balance" || x.kind === "closing") row.eachCell({ includeEmpty: true }, function (c) { c.font = Object.assign({}, FONT, { bold: true }); });
+      if (x.kind === "closing") row.getCell(5).border = { top: { style: "thin" } };
+      if (x.kind === "heading") row.getCell(1).font = Object.assign({}, FONT, { bold: true });
+      if (x.kind === "subtotal") { row.getCell(1).font = Object.assign({}, FONT, { italic: true }); row.getCell(5).border = { bottom: { style: "thin" } }; row.getCell(4).border = { top: { style: "thin" } }; }
+      if (x.kind === "final") { row.eachCell({ includeEmpty: true }, function (c) { c.font = Object.assign({}, FONT, { bold: true }); }); row.getCell(5).border = { top: { style: "thin" }, bottom: { style: "double" } }; row.getCell(5).numFmt = "#,##0.00;(#,##0.00)"; }
+    });
+    widths(ws, cols, vals);
+    ws.pageSetup = { paperSize: 9, orientation: "portrait", fitToPage: true, fitToWidth: 1, fitToHeight: 0, margins: { left: 0.5, right: 0.5, top: 0.6, bottom: 0.6, header: 0.3, footer: 0.3 } };
+
+    // Sheets 2 and 3: every line in its original order
+    spec.sheets.forEach(function (s) {
+      var sh = wb.addWorksheet(s.name, { views: [{ state: "frozen", ySplit: 1 }] });
+      var c2 = [{ h: "Date", min: 11 }, { h: "Reference", min: 12, max: 26 }, { h: "Description", min: 30, max: 70 }, { h: s.gl || "GL account", min: 12, max: 34 }, { h: "Amount", num: true, min: 13 },
+        { h: "Status", min: 11 }, { h: "Note", min: 30, max: 80 }, { h: "Matched with", min: 14, max: 34 }, { h: "Matched amount", num: true, min: 14 }, { h: "Difference", num: true, min: 13 }];
+      header(sh, c2);
+      var vv = [];
+      s.rows.forEach(function (x) {
+        var v = [toDate(x.date), x.ref || "", x.desc || "", x.gl || "", x.amount / 100, x.status, x.note || "", x.mref || "", x.mamt == null ? null : x.mamt / 100, x.diff == null ? null : x.diff / 100];
+        var row = sh.addRow(v); vv.push(v);
+        row.eachCell({ includeEmpty: true }, function (c) {
+          c.font = Object.assign({}, FONT, x.status === "Unmatched" && c.col === 6 ? { bold: true } : {});
+          c.alignment = { vertical: "top", horizontal: c.col === 1 ? "left" : undefined };
+          if (x.status === "Unmatched") c.fill = { type: "pattern", pattern: "solid", fgColor: { argb: GREY } };
+        });
+        row.getCell(1).numFmt = "dd/mm/yyyy";
+        [5, 9, 10].forEach(function (i) { row.getCell(i).numFmt = NUM; });
+      });
+      widths(sh, c2, vv);
+      sh.pageSetup = { paperSize: 9, orientation: "landscape", fitToPage: true, fitToWidth: 1, fitToHeight: 0, printTitlesRow: "1:1" };
+      sh.autoFilter = { from: { row: 1, column: 1 }, to: { row: 1, column: 10 } };
+    });
+    return wb;
+  }
+
+  function download(spec, filename, onDone, onFail) {
+    try {
+      if (typeof ExcelJS === "undefined") throw new Error("Excel library did not load");
+      build(ExcelJS, spec).xlsx.writeBuffer().then(function (buf) {
+        var blob = new Blob([buf], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+        function viaLink() {
+          var a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = filename;
+          document.body.appendChild(a); a.click(); a.remove();
+          setTimeout(function () { URL.revokeObjectURL(a.href); }, 4000);
+          onDone();
+        }
+        viaLink();
+      }, onFail);
+    } catch (e) { onFail(e); }
+  }
+  return { build: build, download: download };
+})();
+
+
+// Shared statement and export-spec builder. cfg: {A, B, nameA, nameB, balA, balB, openA, openB, desc(row), gl(row), glHead, title, subtitle}
+var RecReport = (function () {
+  function short(s, n) { s = String(s || "").replace(/\s+/g, " ").trim(); return s.length > n ? s.slice(0, n - 1) + "…" : s; }
+  function statement(res, cfg) {
+    var out = [{ kind: "balance", label: "Balance per " + cfg.nameA.toLowerCase(), amount: cfg.balA }];
+    if (cfg.openA !== cfg.openB) out.push({ kind: "subtotal", label: "Opening balance difference", amount: -(cfg.openA - cfg.openB) });
+    var byCat = {}, order = [];
+    res.groups.forEach(function (g) {
+      if (!g.diff) return;
+      if (!byCat[g.cat]) { byCat[g.cat] = { label: g.label, items: [], total: 0 }; order.push(g.cat); }
+      var c = byCat[g.cat], r = g.rows[0];
+      c.items.push({ kind: "item", label: short(cfg.desc(r) || r.ref, 60), date: g.date, ref: g.rows.map(function (x) { return x.ref; }).filter(function (v, k, a) { return v && a.indexOf(v) === k; }).join(" / "), amount: -g.diff });
+      c.total += -g.diff;
+    });
+    order.sort(function (a, b) { return Math.abs(byCat[b].total) - Math.abs(byCat[a].total); });
+    order.forEach(function (k) {
+      var c = byCat[k];
+      out.push({ kind: "heading", label: c.label });
+      c.items.forEach(function (i) { out.push(i); });
+      out.push({ kind: "subtotal", label: "Total " + c.label.toLowerCase(), amount: c.total });
+    });
+    out.push({ kind: "closing", label: "Balance per " + cfg.nameB.toLowerCase(), amount: cfg.balB });
+    out.push({ kind: "final", label: "Unexplained difference", amount: res.unexplained });
+    return out;
+  }
+  function lines(res, side, cfg) {
+    var rows = [];
+    res.groups.forEach(function (g) {
+      var own = g.rows.filter(function (x) { return x.side === side; }); if (!own.length) return;
+      var other = g.rows.filter(function (x) { return x.side !== side; });
+      var partners = other.length ? other : null;
+      var ok = g.sev === "ok";
+      own.forEach(function (r, i) {
+        var p = partners || own.filter(function (x) { return x !== r; });
+        var ownTot = own.reduce(function (a, x) { return a + x.amt; }, 0), pTot = p.reduce(function (a, x) { return a + x.amt; }, 0);
+        rows.push({ line: r.line, date: r.date, ref: r.ref, desc: cfg.desc(r), gl: cfg.gl(r), amount: r.amt,
+          status: ok ? "Matched" : "Unmatched",
+          note: (ok ? (g.how ? "Matched on " + g.how.charAt(0).toLowerCase() + g.how.slice(1) : g.label) + (g.label !== "Matched" && g.label !== "Confirmed by you" ? ". " + g.label : "") : g.label) + (g.note ? ". " + g.note : ""),
+          mref: p.length ? p.map(function (x) { return x.ref || short(cfg.desc(x), 30); }).join(" / ") : "",
+          mamt: p.length ? pTot : null,
+          diff: !p.length ? null : i > 0 ? null : partners ? ownTot - pTot : ownTot });
+      });
+    });
+    rows.sort(function (a, b) { return a.line - b.line; });
+    return rows;
+  }
+  function spec(res, cfg) {
+    return { title: cfg.title, subtitle: cfg.subtitle, recon: statement(res, cfg),
+      sheets: [{ name: cfg.sheetB || cfg.nameB, gl: cfg.glHead, rows: lines(res, cfg.B, cfg) }, { name: cfg.sheetA || cfg.nameA, gl: cfg.glHead, rows: lines(res, cfg.A, cfg) }] };
+  }
+  return { statement: statement, lines: lines, spec: spec };
+})();
+if (typeof module !== "undefined") module.exports = { RecXlsx: RecXlsx, RecReport: RecReport };
+
+// Supplier reconciliation engine. Pure functions, no DOM.
+// Convention after parsing: amounts are in cents, positive = increases what we owe the supplier.
+var Recon = (function () {
+  var MON = { jan: 0, feb: 1, mar: 2, apr: 3, may: 4, jun: 5, jul: 6, aug: 7, sep: 8, oct: 9, nov: 10, dec: 11 };
+
+  function parseDate(v) {
+    if (v == null) return null;
+    var s = String(v).trim();
+    if (!s) return null;
+    var m;
+    if ((m = s.match(/^(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{2,4})$/))) {
+      var y = +m[3]; if (y < 100) y += 2000;
+      return Date.UTC(y, +m[2] - 1, +m[1]);
+    }
+    if ((m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/))) return Date.UTC(+m[1], +m[2] - 1, +m[3]);
+    if ((m = s.match(/^(\d{1,2})[\s\-]([A-Za-z]{3})[A-Za-z]*[\s\-,]+(\d{2,4})$/))) {
+      var mo = MON[m[2].toLowerCase()]; if (mo == null) return null;
+      var yy = +m[3]; if (yy < 100) yy += 2000;
+      return Date.UTC(yy, mo, +m[1]);
+    }
+    if (/^\d{5}(\.\d+)?$/.test(s)) { var n = Math.floor(+s); if (n > 30000 && n < 80000) return Date.UTC(1899, 11, 30) + n * 864e5; }
+    return null;
+  }
+
+  function parseAmount(v) {
+    if (v == null) return null;
+    var s = String(v).trim();
+    if (!s) return null;
+    var neg = false;
+    if (/^\(.*\)$/.test(s)) { neg = true; s = s.slice(1, -1); }
+    if (/(cr|-)$/i.test(s)) { neg = !neg; s = s.replace(/(cr|-)$/i, ""); }
+    s = s.replace(/[^0-9.\-]/g, "");
+    if (!s || s === "-" || s === ".") return null;
+    var n = parseFloat(s);
+    if (isNaN(n)) return null;
+    var c = Math.round(n * 100);
+    return neg ? -c : c;
+  }
+
+  function splitRows(text) {
+    var lines = String(text).replace(/\r/g, "").split("\n").filter(function (l) { return l.trim() !== ""; });
+    if (!lines.length) return [];
+    var tab = lines[0].indexOf("\t") >= 0;
+    return lines.map(function (l) { return tab ? l.split("\t") : csvLine(l); });
+  }
+
+  function csvLine(l) {
+    var out = [], cur = "", q = false;
+    for (var i = 0; i < l.length; i++) {
+      var ch = l[i];
+      if (q) { if (ch === '"') { if (l[i + 1] === '"') { cur += '"'; i++; } else q = false; } else cur += ch; }
+      else if (ch === '"') q = true;
+      else if (ch === ",") { out.push(cur); cur = ""; }
+      else cur += ch;
+    }
+    out.push(cur);
+    return out;
+  }
+
+  var HEAD = {
+    date: /date/i,
+    ref: /^(ref|reference|invoice|inv|doc|document|doc\s*no|document\s*no|number|no\.?|trans.*no)/i,
+    desc: /(desc|narration|details|particulars|memo|comment)/i,
+    type: /^(type|doc\s*type|trans.*type|tx\s*type)$/i,
+    debit: /^(debit|dr|debits)$/i,
+    credit: /^(credit|cr|credits)$/i,
+    amount: /^(amount|value|total|amt)/i
+  };
+
+  function mapColumns(header) {
+    var map = {};
+    header.forEach(function (h, i) {
+      var t = String(h || "").trim();
+      ["date", "type", "debit", "credit", "amount", "desc", "ref"].forEach(function (k) {
+        if (map[k] == null && HEAD[k].test(t) && Object.keys(map).every(function (o) { return map[o] !== i; })) map[k] = i;
+      });
+    });
+    return map;
+  }
+
+  // side: "S" (supplier statement, debit = invoice) or "L" (our ledger, credit = invoice)
+  function parseSide(text, side) {
+    var rows = splitRows(text);
+    if (!rows.length) return { rows: [], warnings: ["No data pasted."], map: {} };
+    var map, start = 0, warnings = [];
+    if (parseDate(rows[0][0]) == null) { map = mapColumns(rows[0]); start = 1; }
+    else map = { date: 0, ref: 1, desc: 2, amount: 3 };
+    if (map.date == null) warnings.push("No Date column found.");
+    if (map.amount == null && map.debit == null && map.credit == null) warnings.push("No Amount, or Debit and Credit, columns found.");
+    var out = [];
+    for (var r = start; r < rows.length; r++) {
+      var row = rows[r];
+      var d = parseDate(row[map.date]);
+      var amt;
+      if (map.debit != null || map.credit != null) {
+        var dr = parseAmount(row[map.debit]) || 0, cr = parseAmount(row[map.credit]) || 0;
+        amt = side === "S" ? dr - cr : cr - dr;
+        if (!dr && !cr) amt = null;
+      } else amt = parseAmount(row[map.amount]);
+      var desc = map.desc != null ? String(row[map.desc] || "").trim() : "";
+      if (d == null || amt == null) {
+        if (/balance|b\/f|brought forward|opening/i.test(desc + " " + (row[map.ref] || ""))) continue;
+        if (row.join("").trim()) warnings.push("Skipped line " + (r + 1) + ": date or amount not readable.");
+        continue;
+      }
+      if (/balance\s*(b\/f|brought)|opening balance/i.test(desc)) continue;
+      out.push({
+        side: side, line: r + 1, date: d,
+        ref: map.ref != null ? String(row[map.ref] || "").trim() : "",
+        desc: desc,
+        typeText: map.type != null ? String(row[map.type] || "").trim() : "",
+        amt: amt
+      });
+    }
+    return { rows: out, warnings: warnings, map: map };
+  }
+
+  function classify(r) {
+    var t = r.typeText.toLowerCase(), txt = (r.ref + " " + r.desc).toLowerCase();
+    if (t) {
+      if (/cr|credit/.test(t)) return "CN";
+      if (/pay|pmt|rec|rct|eft|chq|cash/.test(t)) return "PAY";
+      if (/inv|tax|bill/.test(t)) return r.amt >= 0 ? "INV" : "CN";
+      if (/jnl|journal|adj/.test(t)) return "JNL";
+    }
+    if (/\b(c\/n|cn|crn|credit note|credit)\b|^cn/.test(txt)) return "CN";
+    if (/(payment|pmt|eft|rtgs|chq|cheque|receipt|rcpt|remit|transfer|paid)/.test(txt)) return "PAY";
+    return r.amt >= 0 ? "INV" : "CN";
+  }
+
+  function core(ref) {
+    var s = String(ref || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+    var m = s.match(/(\d+)\D*$/);
+    if (m) return m[1].replace(/^0+/, "") || "0";
+    return s;
+  }
+
+  var NONINV = /^(GRN|PO|LPO|ORDER|ORD|DEL|DELIVERY|DN|JNL|BATCH)\b/i;
+  var INV_IN_TEXT = /\b(INV(?:OICE)?|TAX\s*INV(?:OICE)?|TI|IN|CN|CRN|C\/N|CREDIT\s*NOTE)\s*(?:NO\.?|NUMBER)?[\s\-#:\/]*0*(\d{3,})/gi;
+  function invoiceCore(r) {
+    var ref = String(r.ref || "").trim();
+    if (ref && !NONINV.test(ref) && /\d/.test(ref)) return { core: core(ref), from: "ref" };
+    var m, hits = [];
+    INV_IN_TEXT.lastIndex = 0;
+    while ((m = INV_IN_TEXT.exec(r.desc + " " + ref))) hits.push({ core: m[2].replace(/^0+/, "") || "0", cn: /^(CN|CRN|C\/N|CREDIT)/i.test(m[1]) });
+    if (hits.length) return { core: hits[0].core, from: "details", cn: hits[0].cn };
+    return { core: ref ? core(ref) : "", from: ref ? "ref" : "" };
+  }
+
+  function lev(a, b) {
+    if (a === b) return 0;
+    var p = [], i, j;
+    for (j = 0; j <= b.length; j++) p[j] = j;
+    for (i = 1; i <= a.length; i++) {
+      var prev = p[0]; p[0] = i;
+      for (j = 1; j <= b.length; j++) {
+        var tmp = p[j];
+        p[j] = Math.min(p[j] + 1, p[j - 1] + 1, prev + (a[i - 1] === b[j - 1] ? 0 : 1));
+        prev = tmp;
+      }
+    }
+    return p[b.length];
+  }
+  function sameDigits(a, b) { return a.length === b.length && a.split("").sort().join("") === b.split("").sort().join(""); }
+  function digitsOf(c) { return String(Math.abs(c)); }
+
+  var CATS = {
+    MATCHED:   { label: "Matched", sev: "ok", action: "" },
+    CONFIRMED: { label: "Confirmed by you", sev: "ok", action: "" },
+    CHECK:     { label: "Check this match", sev: "check", action: "Same amount, but no invoice number links them. Confirm or reject." },
+    PAY_AMT:   { label: "Payment matched on amount", sev: "ok", action: "References differ; amount and date agree." },
+    PARTIAL:   { label: "Posted in parts", sev: "ok", action: "Invoice captured in parts; totals agree." },
+    REVERSED:  { label: "Posted and reversed", sev: "ok", action: "Posting and its reversal cancel out." },
+    WRONG_REF: { label: "Wrong invoice number", sev: "warn", action: "Correct the reference in the ledger." },
+    TRANSPOSE: { label: "Transposed amount", sev: "crit", action: "Digits swapped when keying. Correct the ledger amount." },
+    AMT_DIFF:  { label: "Amount difference", sev: "crit", action: "" },
+    DUP_L:     { label: "Duplicate in ledger", sev: "crit", action: "Reverse the duplicate posting." },
+    DUP_S:     { label: "Duplicate on statement", sev: "warn", action: "Ask the supplier to remove the duplicate." },
+    INV_S:     { label: "Invoice not in ledger", sev: "crit", action: "Get the invoice and GRN, then post." },
+    CN_S:      { label: "Credit note not in ledger", sev: "warn", action: "Get the credit note and post it." },
+    PAY_S:     { label: "Payment not in ledger", sev: "crit", action: "Trace the payment in the cash book and post it." },
+    INV_L:     { label: "Invoice not on statement", sev: "warn", action: "Confirm with the supplier; it may belong to another account." },
+    CN_L:      { label: "Credit note not on statement", sev: "warn", action: "Ask the supplier to process the credit." },
+    JNL:       { label: "Journal not on statement", sev: "warn", action: "Check the journal is valid for this supplier." },
+    TIMING:    { label: "Payment in transit", sev: "info", action: "Timing difference. Should clear on the next statement." },
+    PAY_L:     { label: "Payment not on statement", sev: "warn", action: "Send proof of payment to the supplier." }
+  };
+
+  function run(stmtRows, ledRows, opts) {
+    opts = opts || {};
+    var win = (opts.timingDays == null ? 5 : opts.timingDays) * 864e5;
+    var payWin = (opts.payDays == null ? 7 : opts.payDays) * 864e5;
+    var all = stmtRows.concat(ledRows).map(function (r, i) {
+      var o = Object.assign({}, r); o.id = i; o.kind = classify(o); var ic = invoiceCore(o); if (ic.cn && o.kind === "INV" && o.amt < 0) o.kind = "CN"; o.core = ic.core; o.coreFrom = ic.from; o.key = o.side + o.line; o.g = null; return o;
+    });
+    var S = all.filter(function (r) { return r.side === "S"; }), L = all.filter(function (r) { return r.side === "L"; });
+    var stmtEnd = S.reduce(function (m, r) { return Math.max(m, r.date); }, 0) || L.reduce(function (m, r) { return Math.max(m, r.date); }, 0);
+    var groups = [];
+    function grp(cat, rows, note) {
+      var g = { cat: cat, rows: rows, note: note || "" };
+      rows.forEach(function (r) { r.g = g; });
+      g.s = rows.filter(function (r) { return r.side === "S"; }).reduce(function (a, r) { return a + r.amt; }, 0);
+      g.l = rows.filter(function (r) { return r.side === "L"; }).reduce(function (a, r) { return a + r.amt; }, 0);
+      g.diff = g.s - g.l;
+      groups.push(g);
+      return g;
+    }
+    var free = function (r) { return !r.g; };
+
+    var dec = opts.decisions || {}, chkWin = (opts.checkDays == null ? 14 : opts.checkDays) * 864e5;
+    var rejected = function (a, b) { return dec[a.key + "|" + b.key] === "no"; };
+    Object.keys(dec).forEach(function (k) {
+      if (dec[k] !== "yes") return;
+      var p = k.split("|"), a = S.filter(function (x) { return x.key === p[0]; })[0], b = L.filter(function (x) { return x.key === p[1]; })[0];
+      if (a && b && !a.g && !b.g) { var g = grp(a.amt === b.amt ? "CONFIRMED" : "AMT_DIFF", [a, b]); g.how = "Confirmed by you"; }
+    });
+
+    // 1. Reversals within one side: same reference, amounts cancel.
+    [S, L].forEach(function (side) {
+      side.forEach(function (a) {
+        if (a.g || !a.core) return;
+        var b = side.find(function (x) { return !x.g && x !== a && x.core === a.core && x.amt === -a.amt && x.amt !== 0; });
+        if (!b) return;
+        var hasRev = /rev|revers|cancel|error/i.test(a.desc + b.desc + a.typeText + b.typeText);
+        var counterpart = (a.side === "S" ? L : S).some(function (x) { return x.core === a.core && Math.abs(x.amt) === Math.abs(a.amt); });
+        if (hasRev || !counterpart) grp("REVERSED", [a, b], "Cancels out on the " + (a.side === "S" ? "statement" : "ledger") + ".");
+      });
+    });
+
+    // 2. Exact matches on reference + amount, with duplicate detection.
+    var buckets = {};
+    all.filter(free).forEach(function (r) {
+      if (!r.core || r.kind === "PAY") return;
+      var k = (r.kind === "CN" ? "C" : "I") + ":" + r.core + ":" + r.amt;
+      (buckets[k] = buckets[k] || { S: [], L: [] })[r.side].push(r);
+    });
+    Object.keys(buckets).forEach(function (k) {
+      var b = buckets[k]; if (!b.S.length || !b.L.length) return;
+      var n = Math.min(b.S.length, b.L.length);
+      for (var i = 0; i < n; i++) grp("MATCHED", [b.S[i], b.L[i]]);
+      b.L.slice(n).forEach(function (r) { grp("DUP_L", [r], "Same reference and amount as " + b.L[0].ref + " already matched."); });
+      b.S.slice(n).forEach(function (r) { grp("DUP_S", [r], "Supplier shows " + r.ref + " more times than the ledger."); });
+    });
+
+    // 3. Same reference, amounts differ: parts, transposition, price difference.
+    var byRef = {};
+    all.filter(free).forEach(function (r) {
+      if (!r.core || r.kind === "PAY") return;
+      var k = (r.kind === "CN" ? "C" : "I") + ":" + r.core;
+      (byRef[k] = byRef[k] || { S: [], L: [] })[r.side].push(r);
+    });
+    Object.keys(byRef).forEach(function (k) {
+      var b = byRef[k]; if (!b.S.length || !b.L.length) return;
+      var ss = b.S.reduce(function (a, r) { return a + r.amt; }, 0), ls = b.L.reduce(function (a, r) { return a + r.amt; }, 0);
+      var rows = b.S.concat(b.L);
+      if (ss === ls) { grp("PARTIAL", rows, b.L.length + " ledger line(s) against " + b.S.length + " statement line(s)."); return; }
+      if (b.S.length === 1 && b.L.length === 1 && sameDigits(digitsOf(ss), digitsOf(ls)) && (ss - ls) % 900 === 0) {
+        grp("TRANSPOSE", rows, "Statement " + fmt(ss) + ", ledger " + fmt(ls) + "."); return;
+      }
+      var g = grp("AMT_DIFF", rows);
+      var d = ss - ls;
+      g.note = (Math.abs(d) % 900 === 0 ? "Difference divisible by 9, possible keying error. " : "") +
+        (d > 0 ? "Ledger understated by " + fmt(d) + "." : "Ledger overstated by " + fmt(-d) + ".");
+      g.action = d > 0 ? "Check the invoice and GRN, then post the shortfall." : "Check pricing on the invoice; post a correction or request a credit note.";
+    });
+
+    // 4. Payments: match on amount within a date window, closest date first.
+    var sp = S.filter(function (r) { return free(r) && r.kind === "PAY"; });
+    L.filter(function (r) { return free(r) && r.kind === "PAY"; }).forEach(function (l) {
+      var best = null;
+      sp.forEach(function (s) {
+        if (s.g || s.amt !== l.amt) return;
+        var gap = Math.abs(s.date - l.date);
+        if (gap <= payWin && (!best || gap < Math.abs(best.date - l.date))) best = s;
+      });
+      if (best) grp(best.core && best.core === l.core ? "MATCHED" : "PAY_AMT", [best, l]);
+    });
+
+    // 5. Near matches: same amount and kind, reference one or two characters off.
+    S.filter(function (r) { return free(r) && r.kind !== "PAY"; }).forEach(function (s) {
+      var cands = L.filter(function (l) { return free(l) && l.kind === s.kind && l.amt === s.amt && l.core && s.core; });
+      var best = null, bd = 99;
+      cands.forEach(function (l) {
+        var d = sameDigits(l.core, s.core) ? 1 : lev(l.core, s.core);
+        if (d < bd) { bd = d; best = l; }
+      });
+      if (best && bd <= 2) grp("WRONG_REF", [s, best], "Statement " + s.ref + ", ledger " + best.ref + ".");
+    });
+
+    // 5b. Same kind and amount within a couple of weeks, nothing else linking them: you decide.
+    S.filter(function (r) { return free(r) && r.kind !== "PAY"; }).forEach(function (s) {
+      var best = null;
+      L.forEach(function (l) {
+        if (l.g || l.kind !== s.kind || l.amt !== s.amt || rejected(s, l) || Math.abs(l.date - s.date) > chkWin) return;
+        if (!best || Math.abs(l.date - s.date) < Math.abs(best.date - s.date)) best = l;
+      });
+      if (best) grp("CHECK", [s, best], "Statement " + (s.ref || "no ref") + " on " + fmtDate(s.date) + ", ledger " + (best.ref || "no ref") + " on " + fmtDate(best.date) + ".");
+    });
+
+    // 6. Whatever is left.
+    all.filter(free).forEach(function (r) {
+      if (r.side === "S") grp(r.kind === "PAY" ? "PAY_S" : r.kind === "CN" ? "CN_S" : "INV_S", [r]);
+      else if (r.kind === "PAY") grp(r.date >= stmtEnd - win ? "TIMING" : "PAY_L", [r]);
+      else grp(r.kind === "CN" ? "CN_L" : r.kind === "JNL" ? "JNL" : "INV_L", [r]);
+    });
+
+    groups.forEach(function (g) {
+      if (!g.how) {
+        var fromDetails = g.rows.some(function (r) { return r.coreFrom === "details"; });
+        g.how = { MATCHED: g.rows[0].kind === "PAY" ? "Payment reference" : fromDetails ? "Invoice no. found in details" : "Invoice no. and amount",
+          PAY_AMT: "Amount and date", PARTIAL: "Invoice no., parts add up", REVERSED: "Posting and reversal", WRONG_REF: "Amount, near invoice no.",
+          TRANSPOSE: "Invoice no., digits swapped", AMT_DIFF: "Invoice no.", DUP_L: "Repeats a matched line", DUP_S: "Repeats a matched line", CHECK: "Amount only" }[g.cat] || "";
+      }
+      g.pair = g.rows.length === 2 ? g.rows[0].key + "|" + g.rows[1].key : "";
+      var c = CATS[g.cat]; g.label = c.label; g.sev = c.sev; if (!g.action) g.action = c.action;
+      g.date = Math.min.apply(null, g.rows.map(function (r) { return r.date; }));
+    });
+    groups.sort(function (a, b) { return a.date - b.date; });
+
+    var sTot = S.reduce(function (a, r) { return a + r.amt; }, 0), lTot = L.reduce(function (a, r) { return a + r.amt; }, 0);
+    var oS = opts.openS || 0, oL = opts.openL || 0;
+    var byCat = {};
+    groups.forEach(function (g) {
+      var c = byCat[g.cat] = byCat[g.cat] || { cat: g.cat, label: g.label, sev: g.sev, count: 0, effect: 0 };
+      c.count++; c.effect += g.diff;
+    });
+    var explained = Object.keys(byCat).reduce(function (a, k) { return a + byCat[k].effect; }, 0) + (oS - oL);
+    return {
+      groups: groups, byCat: byCat, stmtEnd: stmtEnd,
+      stmtBal: oS + sTot, ledBal: oL + lTot, openS: oS, openL: oL,
+      diff: (oS + sTot) - (oL + lTot), unexplained: (oS + sTot) - (oL + lTot) - explained,
+      counts: { S: S.length, L: L.length }
+    };
+  }
+
+  function fmt(c) {
+    var n = Math.abs(c) / 100;
+    var s = n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    return c < 0 ? "(" + s + ")" : s;
+  }
+  function fmtDate(t) {
+    if (t == null) return "";
+    var d = new Date(t);
+    return ("0" + d.getUTCDate()).slice(-2) + "/" + ("0" + (d.getUTCMonth() + 1)).slice(-2) + "/" + d.getUTCFullYear();
+  }
+
+  function tsvLine(l) { return l.split("\t").map(function (c) { return /^".*"$/.test(c) ? c.slice(1, -1).replace(/""/g, '"') : c; }); }
+  function gridRows(text) {
+    var lines = String(text).replace(/\r/g, "").split("\n").filter(function (l) { return l.trim() !== ""; });
+    if (!lines.length) return [];
+    var tab = lines.some(function (l) { return l.indexOf("\t") >= 0; });
+    var rows = lines.map(function (l) { return tab ? tsvLine(l) : csvLine(l); });
+    var w = Math.max.apply(null, rows.map(function (r) { return r.length; }));
+    return rows.map(function (r) { r = r.map(function (v) { return v == null ? "" : String(v); }); while (r.length < w) r.push(""); return r; });
+  }
+  var ROLES = ["date", "ref", "details", "type", "amount", "debit", "credit", "ignore"];
+  var ROLE_LABEL = { date: "Date", ref: "Invoice / ref", details: "Details", type: "Type", amount: "Amount", debit: "Debit", credit: "Credit", ignore: "Ignore" };
+  var GHEAD = [
+    ["ignore", /^(balance|running balance|cumulative|closing balance|period|posted by|user|status|currency|due date|age|days)$/i],
+    ["date", /^(date|transaction date|trans\.? date|posting date|invoice date|doc date|document date|txn date)$/i],
+    ["debit", /^(debit|debits|dr|debit amount)$/i],
+    ["credit", /^(credit|credits|cr|credit amount)$/i],
+    ["amount", /^(amount|value|amt|total|gross|gross amount|net amount)$/i],
+    ["type", /^(type|doc type|document type|trans\.? type|tx type|transaction type)$/i],
+    ["ref", /^(ref|reference|invoice|invoice no\.?|inv no\.?|doc no\.?|document no\.?|document number|number|no\.?|your ref|our ref|supplier ref)$/i],
+    ["details", /(details|description|narration|particulars|memo|comment|narrative)/i]
+  ];
+  function headRole(h) { var t = String(h || "").trim(); if (!t) return null; for (var i = 0; i < GHEAD.length; i++) if (GHEAD[i][1].test(t)) return GHEAD[i][0]; return /date/i.test(t) ? "date" : null; }
+  function detect(rows) {
+    if (!rows.length) return { hasHeader: false, roles: [], how: "" };
+    var first = rows[0], hits = first.map(headRole);
+    var looksHeader = first.every(function (c) { return parseAmount(c) == null || c === ""; }) && first.some(function (c) { return parseDate(c) == null && String(c).trim(); });
+    if (looksHeader && hits.filter(Boolean).length >= 2) {
+      var seen = {}, roles = hits.map(function (r) { r = r || "ignore"; if (r !== "ignore" && seen[r]) return "ignore"; seen[r] = 1; return r; });
+      if (roles.indexOf("amount") >= 0 && (roles.indexOf("debit") >= 0 || roles.indexOf("credit") >= 0)) roles = roles.map(function (r) { return r === "amount" ? "ignore" : r; });
+      return { hasHeader: true, roles: roles, how: "Read from your header row" };
+    }
+    if (!looksHeader && first.length === 5) return { hasHeader: false, roles: ["date", "ref", "details", "debit", "credit"], how: "No header row, so columns are taken in the grid's order" };
+    if (!looksHeader && first.length === 4) return { hasHeader: false, roles: ["date", "ref", "details", "amount"], how: "No header row: Date, Reference, Details, Amount" };
+    return { hasHeader: looksHeader, roles: infer(looksHeader ? rows.slice(1) : rows), how: "Worked out from the data" };
+  }
+  function infer(rows) {
+    var w = rows[0] ? rows[0].length : 0, roles = new Array(w).fill("ignore"), nums = [], gotDate = false;
+    var rate = function (c, f) { var n = 0, t = 0; rows.forEach(function (r) { var v = r[c]; if (v === "" || v == null) return; n++; if (f(v)) t++; }); return { hit: n ? t / n : 0, fill: rows.length ? n / rows.length : 0 }; };
+    for (var c = 0; c < w; c++) {
+      var d = rate(c, function (v) { return parseDate(v) != null; }), a = rate(c, function (v) { return parseAmount(v) != null && !/[A-Za-z]/.test(v); });
+      if (!gotDate && d.hit > 0.8) { roles[c] = "date"; gotDate = true; } else if (a.hit > 0.9 && a.fill > 0) nums.push({ c: c, fill: a.fill });
+    }
+    var part = nums.filter(function (x) { return x.fill < 0.95; });
+    if (part.length >= 2) { roles[part[0].c] = "debit"; roles[part[1].c] = "credit"; } else if (nums.length) roles[nums[0].c] = "amount";
+    var best = -1, bl = 0, bestRef = -1, rs = 0;
+    for (var k = 0; k < w; k++) {
+      if (roles[k] !== "ignore") continue;
+      var vals = rows.map(function (r) { return String(r[k] || "").trim(); }).filter(Boolean); if (!vals.length) continue;
+      var avg = vals.reduce(function (s, v) { return s + v.length; }, 0) / vals.length;
+      var refy = vals.filter(function (v) { return /\d/.test(v) && /^[A-Za-z0-9\/\- ]{3,20}$/.test(v); }).length / vals.length;
+      var short = vals.filter(function (v) { return v.length <= 6 && /^[A-Za-z ]+$/.test(v); }).length / vals.length;
+      if (short > 0.9) { roles[k] = "type"; continue; }
+      if (refy > 0.8 && refy > rs) { rs = refy; bestRef = k; }
+      if (avg > bl) { bl = avg; best = k; }
+    }
+    if (bestRef >= 0) roles[bestRef] = "ref";
+    if (best >= 0 && best !== bestRef) roles[best] = "details";
+    return roles;
+  }
+  function parseRows(rows, map, side) {
+    var ix = {}, out = [], warnings = [];
+    map.roles.forEach(function (r, i) { if (r !== "ignore" && ix[r] == null) ix[r] = i; });
+    if (ix.date == null) warnings.push("Choose which column is the Date.");
+    if (ix.amount == null && ix.debit == null && ix.credit == null) warnings.push("Choose the Amount column, or Debit and Credit.");
+    if (warnings.length) return { rows: [], warnings: warnings };
+    for (var r = map.hasHeader ? 1 : 0; r < rows.length; r++) {
+      var row = rows[r], desc = ix.details != null ? String(row[ix.details] || "").replace(/^"|"$/g, "").trim() : "";
+      var ref = ix.ref != null ? String(row[ix.ref] || "").trim() : "";
+      if (/balance\s*(b\/f|brought|c\/f)|opening balance|closing balance/i.test(desc + " " + ref)) continue;
+      var d = parseDate(row[ix.date]), amt;
+      if (ix.debit != null || ix.credit != null) {
+        var dr = parseAmount(row[ix.debit]) || 0, cr = parseAmount(row[ix.credit]) || 0;
+        amt = (!dr && !cr) ? null : side === "S" ? dr - cr : cr - dr;
+      } else amt = parseAmount(row[ix.amount]);
+      if (d == null || amt == null) { if (row.join("").trim()) warnings.push("Line " + (r + 1) + " skipped: date or amount not readable."); continue; }
+      out.push({ side: side, line: r + 1, date: d, ref: ref, desc: desc, typeText: ix.type != null ? String(row[ix.type] || "").trim() : "", amt: amt });
+    }
+    return { rows: out, warnings: warnings };
+  }
+
+  return { gridRows: gridRows, detect: detect, parseRows: parseRows, ROLES: ROLES, ROLE_LABEL: ROLE_LABEL, parseSide: parseSide, run: run, fmt: fmt, fmtDate: fmtDate, CATS: CATS, parseAmount: parseAmount, parseDate: parseDate };
+})();
+if (typeof module !== "undefined") module.exports = Recon;
+
+var SAMPLE={"openS":"12,480.00","openL":"12,480.00","stmt":"Date\tType\tReference\tDescription\tDebit\tCredit\tBalance\tDue Date\n01/09/2026\tINV\tINV-10441\tCorrugated cartons 600x400\t3,215.00\t\t15,695.00\t30 days\n02/09/2026\tINV\tINV-10445\tStretch wrap 500mm x 20\t1,486.50\t\t17,181.50\t30 days\n03/09/2026\tINV\tINV-10452\tTape 48mm clear x 36\t1,240.00\t\t18,421.50\t30 days\n04/09/2026\tINV\tINV-10455\tPallet labels 100x150\t612.40\t\t19,033.90\t30 days\n05/09/2026\tINV\tINV-10458\tCorrugated cartons 400x300\t2,940.00\t\t21,973.90\t30 days\n07/09/2026\tINV\tINV-10460\tBubble wrap rolls x 12\t4,385.00\t\t26,358.90\t30 days\n08/09/2026\tPMT\tRCPT-5509\tPayment received, thank you\t\t5,980.00\t20,378.90\t30 days\n09/09/2026\tINV\tINV-10463\tShrink film 19mic\t1,875.25\t\t22,254.15\t30 days\n10/09/2026\tINV\tINV-10468\tCarton sealing tape brown\t934.80\t\t23,188.95\t30 days\n11/09/2026\tINV\tINV-10471\tPallet wrap machine film\t2,150.00\t\t25,338.95\t30 days\n14/09/2026\tPMT\tRCPT-5521\tPayment received, thank you\t\t6,500.00\t18,838.95\t30 days\n15/09/2026\tINV\tINV-10474\tVoid fill paper x 10\t1,320.00\t\t20,158.95\t30 days\n16/09/2026\tINV\tINV-10476\tCorrugated cartons 600x400\t3,215.00\t\t23,373.95\t30 days\n17/09/2026\tINV\tINV-10479\tPrinted cartons, Kestrel logo\t5,400.00\t\t28,773.95\t30 days\n18/09/2026\tPMT\tRCPT-5530\tCash payment received, Branch 3\t\t1,500.00\t27,273.95\t30 days\n19/09/2026\tCN\tCN-0228\tPricing adjustment INV-10441\t\t215.00\t27,058.95\t30 days\n21/09/2026\tINV\tINV-10482\tStrapping kit\t2,068.90\t\t29,127.85\t30 days\n22/09/2026\tCN\tCN-0231\tDamaged cartons returned\t\t420.00\t28,707.85\t30 days\n23/09/2026\tINV\tINV-10485\tStretch wrap 500mm x 20\t1,486.50\t\t30,194.35\t30 days\n24/09/2026\tINV\tINV-10487\tTape 48mm clear x 36\t1,240.00\t\t31,434.35\t30 days\n25/09/2026\tPMT\tRCPT-5544\tPayment received, thank you\t\t9,750.00\t21,684.35\t30 days\n26/09/2026\tINV\tINV-10488\tCorrugated cartons 400x300\t3,600.00\t\t25,284.35\t30 days\n28/09/2026\tINV\tINV-10491\tPallet labels 100x150\t612.40\t\t25,896.75\t30 days\n29/09/2026\tINV\tINV-10493\tFood-grade liners\t2,760.00\t\t28,656.75\t30 days\n30/09/2026\tINV\tINV-10495\tBubble wrap rolls x 6\t2,192.50\t\t30,849.25\t30 days","ledger":"Date\tDoc No\tDescription\tDebit\tCredit\tPeriod\tCaptured By\n01/09/2026\tINV-10441\tRidgeway - cartons\t\t3,215.00\t2026/09\tTMOYO\n02/09/2026\tGRN 5512\tRidgeway INV10445 stretch wrap\t\t1,486.50\t2026/09\tRCHARI\n03/09/2026\tINV-10425\tRidgeway - tape\t\t1,240.00\t2026/09\tPNDLOVU\n04/09/2026\tINV-10455\tRidgeway - labels\t\t612.40\t2026/09\tTMOYO\n05/09/2026\t\t\"46270 INV-10458 Corrugated cartons 400x300 2,940.00\"\t\t2,940.00\t2026/09\tRCHARI\n07/09/2026\tINV-10460\tRidgeway - bubble wrap\t\t4,835.00\t2026/09\tPNDLOVU\n08/09/2026\tEFT0907\tPayment Ridgeway\t5,980.00\t\t2026/09\tTMOYO\n09/09/2026\tPO 7781\tRidgeway - shrink film (tax invoice 10463)\t\t1,875.25\t2026/09\tRCHARI\n10/09/2026\tINV-10466\tRidgeway - pallets\t\t990.00\t2026/09\tPNDLOVU\n10/09/2026\tINV-10468\tRidgeway - sealing tape\t\t934.80\t2026/09\tTMOYO\n11/09/2026\tINV-10471\tRidgeway - machine film\t\t2,150.00\t2026/09\tRCHARI\n12/09/2026\tEFT0912\tPayment Ridgeway\t6,500.00\t\t2026/09\tPNDLOVU\n12/09/2026\tINV-10466\tReversal, posted to wrong supplier\t990.00\t\t2026/09\tTMOYO\n13/09/2026\tINV-10471\tRidgeway - machine film\t\t2,150.00\t2026/09\tRCHARI\n18/09/2026\tGRN 5530\tRidgeway - void fill\t\t1,320.00\t2026/09\tPNDLOVU\n16/09/2026\tINV-10476\tRidgeway - cartons\t\t3,215.00\t2026/09\tTMOYO\n17/09/2026\tINV-10479\tRidgeway - printed cartons GRN 1 of 2\t\t3,000.00\t2026/09\tRCHARI\n19/09/2026\tCN-0228\tRidgeway - pricing credit\t215.00\t\t2026/09\tPNDLOVU\n20/09/2026\tINV-10479\tRidgeway - printed cartons GRN 2 of 2\t\t2,400.00\t2026/09\tTMOYO\n21/09/2026\tGRN 5547\tStrapping kit Ridgeway Inv No. 10482\t\t2,068.90\t2026/09\tRCHARI\n23/09/2026\tINV-10485\tRidgeway - stretch wrap\t\t1,486.50\t2026/09\tPNDLOVU\n24/09/2026\tINV-10487\tRidgeway - tape\t\t1,240.00\t2026/09\tTMOYO\n24/09/2026\tINV-10399\tRidgeway - pallet wrap\t\t875.00\t2026/09\tRCHARI\n24/09/2026\tEFT0924\tPayment Ridgeway\t9,750.00\t\t2026/09\tPNDLOVU\n28/09/2026\tINV-10491\tRidgeway - labels\t\t612.40\t2026/09\tTMOYO\n29/09/2026\tINV-10493\tRidgeway - liners\t\t2,700.00\t2026/09\tRCHARI\n30/09/2026\tINV-10495\tRidgeway - bubble wrap\t\t2,192.50\t2026/09\tPNDLOVU\n30/09/2026\tEFT0930\tPayment Ridgeway\t8,000.00\t\t2026/09\tTMOYO"};
+if(typeof module!=="undefined")module.exports=SAMPLE;
+var KIND_NAME = { INV: "Invoice", CN: "Credit note", PAY: "Payment", JNL: "Journal" };
+var APP = { A: "S", key: "supprecon", names: { S: "statement", L: "ledger" }, missing: "Add both the statement and the ledger first.",
+  engine: { rows: Recon.gridRows, detect: Recon.detect, parse: Recon.parseRows, ROLES: Recon.ROLES, ROLE_LABEL: Recon.ROLE_LABEL, fmt: Recon.fmt, fmtDate: Recon.fmtDate, parseAmount: Recon.parseAmount },
+  run: function (a, l, oa, ol) { return Recon.run(a, l, { openS: oa, openL: ol, timingDays: 5, checkDays: 14, decisions: {} }); },
+  counts: function (r) { return r.counts.S + " statement lines and " + r.counts.L + " ledger lines."; },
+  cfg: function (r) { var FD = Recon.fmtDate; return { A: "S", B: "L", nameA: "Supplier statement", nameB: "Ledger", sheetA: "Statement", sheetB: "Ledger", balA: r.stmtBal, balB: r.ledBal, openA: r.openS, openB: r.openL,
+      desc: function (x) { return x.desc; }, gl: function (x) { return x.typeText || KIND_NAME[x.kind] || ""; }, glHead: "Type",
+      title: "Supplier reconciliation", subtitle: "Statement date " + FD(r.stmtEnd), file: "Supplier_Reconciliation_" + FD(r.stmtEnd).replace(/\//g, "-") + ".xlsx" }; },
+  demo: function () { return { a: SAMPLE.stmt, l: SAMPLE.ledger, openA: SAMPLE.openS, openL: SAMPLE.openL }; } };
+(function () {
+  var E = APP.engine, A = APP.A;
+  var $ = function (id) { return document.getElementById(id); };
+  var esc = function (s) { return String(s == null ? "" : s).replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }); };
+  var F = E.fmt, FD = E.fmtDate;
+  var NAME = APP.names;
+  var data = { L: { rows: [], map: null } }; data[A] = { rows: [], map: null };
+  var state = { res: null };
+  var store = {
+    get: function (k) { try { return JSON.parse(localStorage.getItem(k)); } catch (e) { return null; } },
+    set: function (k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { } }
+  };
+  function sig(s, rows, hasHeader) { return APP.key + ":" + s + ":" + (hasHeader ? rows[0].map(function (h) { return String(h).trim().toLowerCase(); }).join("|") : "nohdr" + (rows[0] || []).length); }
+
+  function setRows(s, rows) {
+    var d = data[s];
+    d.rows = rows;
+    if (!rows.length) { d.map = null; renderBox(s); return; }
+    var m = E.detect(rows), saved = store.get(sig(s, rows, m.hasHeader));
+    if (saved && saved.roles && saved.roles.length === rows[0].length) m.roles = saved.roles;
+    d.map = m;
+    renderBox(s);
+  }
+  function parse(s) { var d = data[s]; return d.rows.length ? E.parse(d.rows, d.map, s) : { rows: [], warnings: [] }; }
+
+  function renderBox(s) {
+    var d = data[s], box = $("box" + s);
+    if (!d.rows.length) {
+      box.innerHTML = '<textarea data-side="' + s + '" aria-label="Paste the ' + NAME[s] + ' here" placeholder="Paste the ' + NAME[s] + ' here, or drop an Excel or CSV file"></textarea>';
+      return;
+    }
+    var p = parse(s), m = d.map, start = m.hasHeader ? 1 : 0, w = d.rows[0].length, c;
+    var h = '<div class="loaded"><span><b>' + p.rows.length + "</b> lines loaded</span>" +
+      '<button type="button" class="link" data-clear="' + s + '">Replace</button></div>';
+    if (p.warnings.length) h += '<div class="warn">' + esc(p.warnings[0]) + (p.warnings.length > 1 ? " (" + (p.warnings.length - 1) + " more)" : "") + "</div>";
+    h += '<details class="cols"' + (p.warnings.length ? " open" : "") + '><summary>Columns</summary><div class="mapgrid"><table><thead><tr>';
+    for (c = 0; c < w; c++) h += '<th><select data-side="' + s + '" data-col="' + c + '" aria-label="Column ' + (c + 1) + '">' +
+      E.ROLES.map(function (r) { return '<option value="' + r + '"' + (m.roles[c] === r ? " selected" : "") + ">" + E.ROLE_LABEL[r] + "</option>"; }).join("") + "</select></th>";
+    h += "</tr></thead><tbody>";
+    d.rows.slice(0, start + 3).forEach(function (r) {
+      h += "<tr>" + r.map(function (v, c) { return '<td class="' + (m.roles[c] === "ignore" ? "off" : "") + '">' + esc(v) + "</td>"; }).join("") + "</tr>";
+    });
+    box.innerHTML = h + "</tbody></table></div></details>";
+  }
+
+  function run(auto) {
+    if (!data[A].rows.length || !data.L.rows.length) { toast(APP.missing); return; }
+    var pa = parse(A), pl = parse("L");
+    state.res = APP.run(pa.rows, pl.rows, E.parseAmount($("open" + A).value) || 0, E.parseAmount($("openL").value) || 0);
+    render();
+    $("result").hidden = false;
+    if (auto === true) exportXlsx();
+    $("result").scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  function render() {
+    var r = state.res;
+    var items = r.groups.filter(function (g) { return g.diff; }).length;
+    var checks = r.groups.filter(function (g) { return g.cat === "CHECK"; }).length;
+    $("summary").textContent = APP.counts(r) + " " +
+      (items ? items + (items === 1 ? " item explains" : " items explain") + " the difference." : "No differences.") +
+      (checks ? " " + checks + (checks === 1 ? " match needs" : " matches need") + " confirming; see the Excel export." : "");
+    var lines = RecReport.statement(r, cfg()), h = '<thead><tr><th>Description</th><th class="n">Amount</th><th class="n">Total</th></tr></thead><tbody>';
+    var refline = function (x) { return '<span class="ref">' + [x.ref, FD(x.date)].filter(Boolean).map(esc).join(" · ") + "</span>"; };
+    // a heading with a single item shows that item's amount in the Total column, without a subtotal line
+    var single = {};
+    lines.forEach(function (x, i) { if (x.kind === "heading" && lines[i + 2] && lines[i + 2].kind === "subtotal") { single[i + 1] = 1; single[i + 2] = 2; } });
+    lines.forEach(function (x, i) {
+      if (single[i] === 2) return;
+      if (single[i] === 1) h += '<tr class="k-item"><td>' + esc(x.label) + refline(x) + '</td><td class="n"></td><td class="n">' + F(x.amount) + "</td></tr>";
+      else if (x.kind === "item") h += '<tr class="k-item"><td>' + esc(x.label) + refline(x) + '</td><td class="n">' + F(x.amount) + '</td><td class="n"></td></tr>';
+      else if (x.kind === "heading") h += '<tr class="k-heading"><td colspan="3">' + esc(x.label) + "</td></tr>";
+      else {
+        var off = x.kind === "final" && x.amount !== 0;
+        h += '<tr class="k-' + x.kind + (off ? " off" : "") + '"><td colspan="2">' + esc(x.label) +
+          (x.kind === "final" ? '<span class="status">' + (off ? "Not reconciled" : "Reconciled") + "</span>" : "") + '</td><td class="n tot">' + F(x.amount) + "</td></tr>";
+      }
+    });
+    $("stmtTable").innerHTML = h + "</tbody>";
+  }
+
+  function cfg() { return APP.cfg(state.res); }
+
+  function readFile(input, s) {
+    var f = input.files && input.files[0]; if (!f) return;
+    loadFile(f, s); input.value = "";
+  }
+  function loadFile(f, s) {
+    if (!/\.(csv|txt|tsv|xlsx|xls)$/i.test(f.name)) { toast("Use an Excel or CSV file."); return; }
+    var rd = new FileReader();
+    if (/\.(xlsx|xls)$/i.test(f.name)) {
+      rd.onload = function () {
+        try {
+          var wb = XLSX.read(new Uint8Array(rd.result), { type: "array" });
+          var rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, raw: false, defval: "", dateNF: "dd/mm/yyyy" });
+          rows = rows.filter(function (r) { return r.join("").trim(); }).map(function (r) { return r.map(function (v) { return String(v); }); });
+          var w = Math.max.apply(null, rows.map(function (r) { return r.length; }).concat([0]));
+          rows.forEach(function (r) { while (r.length < w) r.push(""); });
+          setRows(s, rows);
+        } catch (e) { toast("Could not read that file."); }
+      };
+      rd.readAsArrayBuffer(f);
+    } else {
+      rd.onload = function () { setRows(s, E.rows(rd.result)); };
+      rd.readAsText(f);
+    }
+  }
+  function clearAll() {
+    setRows(A, []); setRows("L", []);
+    $("open" + A).value = ""; $("openL").value = "";
+    $("result").hidden = true; state.res = null;
+  }
+  [A, "L"].forEach(function (s) {
+    var p = $("panel" + s), depth = 0;
+    p.addEventListener("dragenter", function (e) { e.preventDefault(); depth++; p.classList.add("drag"); });
+    p.addEventListener("dragover", function (e) { e.preventDefault(); e.dataTransfer.dropEffect = "copy"; });
+    p.addEventListener("dragleave", function () { if (--depth <= 0) { depth = 0; p.classList.remove("drag"); } });
+    p.addEventListener("drop", function (e) {
+      e.preventDefault(); depth = 0; p.classList.remove("drag");
+      var f = e.dataTransfer.files && e.dataTransfer.files[0];
+      if (f) loadFile(f, s);
+      else { var t = e.dataTransfer.getData("text"); if (t && t.trim()) setRows(s, E.rows(t)); }
+    });
+  });
+  window.addEventListener("dragover", function (e) { e.preventDefault(); });
+  window.addEventListener("drop", function (e) { e.preventDefault(); });
+
+  var toastT;
+  function toast(t) { $("toast").textContent = t; clearTimeout(toastT); toastT = setTimeout(function () { $("toast").textContent = ""; }, 3500); }
+  function help(open) {
+    $("help").hidden = !open; $("helpBtn").setAttribute("aria-expanded", open);
+    if (open) $("helpClose").focus();
+  }
+
+  document.addEventListener("input", function (e) {
+    var s = e.target.getAttribute && e.target.getAttribute("data-side");
+    if (s && e.target.tagName === "TEXTAREA" && e.target.value.trim() && (e.inputType === "insertFromPaste" || /[\n\t]/.test(e.target.value))) setRows(s, E.rows(e.target.value));
+  });
+  document.addEventListener("change", function (e) {
+    var t = e.target, s = t.getAttribute("data-side"), c = t.getAttribute("data-col");
+    if (!s || c == null || t.tagName !== "SELECT") return;
+    var d = data[s], role = t.value;
+    d.map.roles[+c] = role;
+    if (role !== "ignore") d.map.roles = d.map.roles.map(function (r, i) { return i !== +c && r === role ? "ignore" : r; });
+    if (role === "amount") d.map.roles = d.map.roles.map(function (r) { return r === "debit" || r === "credit" ? "ignore" : r; });
+    if (role === "debit" || role === "credit") d.map.roles = d.map.roles.map(function (r) { return r === "amount" ? "ignore" : r; });
+    store.set(sig(s, d.rows, d.map.hasHeader), { roles: d.map.roles });
+    renderBox(s);
+    var det = $("box" + s).querySelector("details"); if (det) det.open = true;
+    if (state.res) run(false);
+  });
+  document.addEventListener("click", function (e) {
+    var c = e.target.getAttribute && e.target.getAttribute("data-clear");
+    if (c) { setRows(c, []); $("result").hidden = true; state.res = null; var ta = $("box" + c).querySelector("textarea"); if (ta) ta.focus(); }
+  });
+  document.addEventListener("keydown", function (e) { if (e.key === "Escape" && !$("help").hidden) help(false); });
+  $("file" + A).addEventListener("change", function () { readFile(this, A); });
+  $("fileL").addEventListener("change", function () { readFile(this, "L"); });
+  $("runBtn").addEventListener("click", function () { run(true); });
+  $("clearBtn").addEventListener("click", function () { clearAll(); window.scrollTo({ top: 0, behavior: "smooth" }); toast("Cleared."); });
+  $("helpBtn").addEventListener("click", function () { help($("help").hidden); });
+  $("helpClose").addEventListener("click", function () { help(false); $("helpBtn").focus(); });
+  $("demoBtn").addEventListener("click", function () {
+    var d = APP.demo();
+    setRows(A, E.rows(d.a)); setRows("L", E.rows(d.l));
+    $("open" + A).value = d.openA; $("openL").value = d.openL;
+    help(false); run(false);
+  });
+  $("xlsxBtn").addEventListener("click", exportXlsx);
+  function exportXlsx() {
+    if (!state.res) return;
+    var c = cfg(), b = $("xlsxBtn"); b.disabled = true;
+    RecXlsx.download(RecReport.spec(state.res, c), c.file,
+      function () { b.disabled = false; toast("Excel file saved."); },
+      function (e) { b.disabled = false; toast(e === "declined" ? "Download cancelled." : "Could not create the Excel file."); });
+  }
+  renderBox(A); renderBox("L");
+})();
+</script>
+</body>
+</html>
