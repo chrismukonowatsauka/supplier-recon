@@ -1,0 +1,522 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bank Reconciliation</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  /* Layout: inputs side by side, then summary (tiles, recon statement, exception list), then the line-by-line table. */
+  --bg: #f4f6f6;
+  --surface: #ffffff;
+  --ink: #17262a;
+  --muted: #5c6d71;
+  --line: #d9e1e2;
+  --accent: #1f4e79;
+  --accent-soft: #e3ecf6;
+  --ok: #2f7d4f; --ok-bg: #e5f3ea;
+  --warn: #9a6200; --warn-bg: #fbf0d9;
+  --crit: #b3261e; --crit-bg: #fbe5e3;
+  --info: #3a5ba0; --info-bg: #e6ecf8;
+  --display: "Archivo", "Helvetica Neue", Arial, sans-serif;
+  --body: "IBM Plex Sans", "Segoe UI", Arial, sans-serif;
+  --mono: "IBM Plex Mono", Consolas, monospace;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f1719; --surface: #172224; --ink: #e3ecec; --muted: #93a6a9; --line: #2a3a3d;
+    --accent: #7fb0e0; --accent-soft: #1b2c3f;
+    --ok: #6cc28d; --ok-bg: #18301f; --warn: #e2b04f; --warn-bg: #33290f;
+    --crit: #f08a82; --crit-bg: #3a1a18; --info: #8fa9e6; --info-bg: #1c2540;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0f1719; --surface: #172224; --ink: #e3ecec; --muted: #93a6a9; --line: #2a3a3d;
+  --accent: #7fb0e0; --accent-soft: #1b2c3f;
+  --ok: #6cc28d; --ok-bg: #18301f; --warn: #e2b04f; --warn-bg: #33290f;
+  --crit: #f08a82; --crit-bg: #3a1a18; --info: #8fa9e6; --info-bg: #1c2540;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body { background: var(--bg); color: var(--ink); font: 14px/1.5 var(--body); }
+.wrap { max-width: 1240px; margin: 0 auto; padding: 28px 20px 60px; display: grid; gap: 22px; }
+header { display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between; gap: 12px; border-bottom: 2px solid var(--ink); padding-bottom: 14px; }
+h1 { font: 700 28px/1.1 var(--display); margin: 0; letter-spacing: -0.01em; text-wrap: balance; }
+h2 { font: 600 15px/1.2 var(--display); margin: 0; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
+.lede { margin: 6px 0 0; color: var(--muted); max-width: 64ch; }
+.badge { font: 500 12px var(--body); padding: 4px 10px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); }
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 16px; display: grid; gap: 10px; align-content: start; min-width: 0; }
+.inputs { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.panel-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.panel-head p { margin: 0; color: var(--muted); font-size: 12.5px; }
+textarea { width: 100%; height: 170px; resize: vertical; font: 12px/1.45 var(--mono); color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 4px; padding: 8px; white-space: pre; }
+.row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+label { font-size: 12.5px; color: var(--muted); display: flex; gap: 6px; align-items: center; }
+input[type="text"], input[type="number"] { font: 13px var(--mono); color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 4px; padding: 5px 8px; width: 120px; }
+input[type="number"] { width: 64px; }
+.detect { font-size: 12px; color: var(--muted); min-height: 18px; }
+.detect.bad { color: var(--crit); }
+button, .filebtn { font: 500 13px var(--body); border-radius: 4px; padding: 8px 14px; cursor: pointer; border: 1px solid var(--line); background: var(--surface); color: var(--ink); }
+button:hover, .filebtn:hover { border-color: var(--accent); }
+button.primary { background: var(--accent); border-color: var(--accent); color: var(--surface); }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.filebtn input { position: absolute; width: 1px; height: 1px; opacity: 0; }
+.filebtn { position: relative; padding: 5px 10px; font-size: 12.5px; }
+.actions { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between; }
+.tiles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+.tile { background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 14px 16px; display: grid; gap: 4px; }
+.tile span { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; }
+.tile b { font: 600 22px var(--mono); font-variant-numeric: tabular-nums; }
+.tile.result { border-left: 4px solid var(--ok); }
+.tile.result.off { border-left-color: var(--crit); }
+.summary { display: grid; grid-template-columns: 1.1fr 1fr; gap: 16px; }
+table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; }
+.stmt td { padding: 6px 4px; border-bottom: 1px solid var(--line); }
+.stmt td.n { text-align: right; font-family: var(--mono); white-space: nowrap; }
+.stmt tr.total td { font-weight: 600; border-bottom: 2px solid var(--ink); border-top: 1px solid var(--ink); }
+.stmt tr.sub td { color: var(--muted); font-size: 12.5px; padding-top: 12px; border-bottom: none; }
+.stmt tr.adj td:first-child { padding-left: 16px; }
+.cats { display: grid; gap: 6px; }
+.cat { display: grid; grid-template-columns: 4px 1fr auto auto; gap: 10px; align-items: center; padding: 7px 10px 7px 0; border: 1px solid var(--line); border-radius: 4px; background: var(--surface); text-align: left; width: 100%; }
+.cat i { align-self: stretch; border-radius: 4px 0 0 4px; }
+.cat .c { font: 500 12px var(--mono); color: var(--muted); }
+.cat .a { font: 500 13px var(--mono); min-width: 90px; text-align: right; }
+.cat[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); }
+.sev-ok i, .pill.sev-ok { background: var(--ok); }
+.sev-warn i { background: var(--warn); }
+.sev-crit i { background: var(--crit); }
+.sev-info i { background: var(--info); }
+.pill { display: inline-block; font: 500 11.5px var(--body); padding: 2px 8px; border-radius: 999px; white-space: nowrap; }
+.pill.sev-ok { background: var(--ok-bg); color: var(--ok); }
+.pill.sev-warn { background: var(--warn-bg); color: var(--warn); }
+.pill.sev-crit { background: var(--crit-bg); color: var(--crit); }
+.pill.sev-info { background: var(--info-bg); color: var(--info); }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { padding: 5px 12px; border-radius: 999px; font-size: 12.5px; }
+.chip[aria-pressed="true"] { background: var(--ink); color: var(--surface); border-color: var(--ink); }
+.tablewrap { overflow-x: auto; }
+.detail th { text-align: left; font: 600 11.5px var(--body); text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); padding: 8px 8px; border-bottom: 2px solid var(--ink); white-space: nowrap; }
+.detail td { padding: 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+.detail td.n, .detail th.n { text-align: right; font-family: var(--mono); white-space: nowrap; }
+.detail td.ref { font-family: var(--mono); font-size: 12.5px; white-space: nowrap; }
+.detail td.desc { min-width: 180px; }
+.detail td.todo { min-width: 170px; color: var(--muted); font-size: 12.5px; }
+.detail .note { display: block; font-size: 12px; color: var(--muted); }
+.diffpos { color: var(--crit); }
+.empty { color: var(--muted); padding: 18px 8px; }
+.howto { color: var(--muted); font-size: 13px; display: grid; gap: 4px; }
+.howto p { margin: 0; max-width: 90ch; }
+.toast { font-size: 12.5px; color: var(--ok); }
+.countline { margin: -8px 0 0; color: var(--muted); font-size: 13px; }
+footer a { color: var(--accent); }
+footer { color: var(--muted); font-size: 12px; border-top: 1px solid var(--line); padding-top: 12px; }
+@media (max-width: 860px) {
+  .inputs, .summary { grid-template-columns: 1fr; }
+  .tiles { grid-template-columns: 1fr 1fr; }
+}
+@media (max-width: 420px) { .tiles { grid-template-columns: 1fr; } }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1>Bank Reconciliation</h1>
+      <p class="lede">Match a bank statement against your cash book on date and amount. Every difference is explained by type, with the next step to clear it, and the proof ties the difference to nil. The matching runs in your browser and nothing is uploaded.</p>
+    </div>
+    <span class="badge" id="srcBadge">Sample data loaded</span>
+  </header>
+
+  <section class="inputs" aria-label="Inputs">
+    <div class="panel">
+      <div class="panel-head">
+        <h2>Bank statement</h2>
+        <p>Credit = money in, debit = money out</p>
+      </div>
+      <textarea id="bankIn" spellcheck="false" aria-label="Bank statement data"></textarea>
+      <div class="row">
+        <label class="filebtn" for="bankFile">Open CSV or Excel<input type="file" id="bankFile" accept=".csv,.txt,.tsv,.xlsx,.xls"></label>
+        <label for="openB">Opening balance <input type="text" id="openB" inputmode="decimal"></label>
+      </div>
+      <div class="detect" id="bankDetect"></div>
+    </div>
+    <div class="panel">
+      <div class="panel-head">
+        <h2>Cash book</h2>
+        <p>Debit = receipt, credit = payment</p>
+      </div>
+      <textarea id="ledIn" spellcheck="false" aria-label="Cash book data"></textarea>
+      <div class="row">
+        <label class="filebtn" for="ledFile">Open CSV or Excel<input type="file" id="ledFile" accept=".csv,.txt,.tsv,.xlsx,.xls"></label>
+        <label for="openL">Opening balance <input type="text" id="openL" inputmode="decimal"></label>
+      </div>
+      <div class="detect" id="ledDetect"></div>
+    </div>
+  </section>
+
+  <div class="actions">
+    <div class="row">
+      <button class="primary" id="runBtn" type="button">Reconcile</button>
+      <button id="sampleBtn" type="button">Load sample data</button>
+      <button id="clearBtn" type="button">Clear</button>
+    </div>
+    <div class="row">
+      <label for="ledgerDays">Cash book items in the last <input type="number" id="ledgerDays" min="0" max="31" value="5"> days count as outstanding</label>
+      <label for="dateDays">Match amounts up to <input type="number" id="dateDays" min="0" max="10" value="3"> days apart</label>
+    </div>
+  </div>
+
+  <div class="howto">
+    <p>Copy the lines straight from Excel and paste them in, headers included, or open a CSV or Excel file. Columns are found by name: Date, Reference, Narration (or Description), and either Amount or Debit and Credit. A single Amount column should be positive for money in and negative for money out on both sides.</p>
+  </div>
+
+  <section class="tiles" aria-label="Balances">
+    <div class="tile"><span>Balance per bank</span><b id="tBank">0.00</b></div>
+    <div class="tile"><span>Balance per cash book</span><b id="tLed">0.00</b></div>
+    <div class="tile"><span>Difference</span><b id="tDiff">0.00</b></div>
+    <div class="tile result" id="tResBox"><span>Unexplained</span><b id="tRes">0.00</b></div>
+  </section>
+  <p class="countline" id="countLine"></p>
+
+  <section class="summary">
+    <div class="panel">
+      <h2>Reconciliation statement</h2>
+      <table class="stmt" id="stmtTable"></table>
+    </div>
+    <div class="panel">
+      <div class="panel-head"><h2>Items by type</h2><p>Select a type to list its lines</p></div>
+      <div class="cats" id="cats"></div>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="actions">
+      <div class="chips" id="chips"></div>
+      <div class="row"><span class="toast" id="toast" role="status"></span>
+        <button id="xlsxBtn" type="button">Export to Excel</button>
+        <button id="copyBtn" type="button">Copy table</button></div>
+    </div>
+    <div class="tablewrap">
+      <table class="detail">
+        <thead><tr><th>Status</th><th>Date</th><th>Bank ref</th><th>Cash book ref</th><th>Narration</th><th class="n">Bank</th><th class="n">Cash book</th><th class="n">Difference</th><th>Next step</th></tr></thead>
+        <tbody id="rows"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <footer>Sample data is fictional: Northgate Bank and Unity Commercial Bank statements against the Kestrel Distributors cash book, September 2026. Built by Chris Mukonowatsauka &middot; <a href="https://www.linkedin.com/in/cmkn" target="_blank" rel="noopener">linkedin.com/in/cmkn</a></footer>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script>
+// Bank reconciliation engine. Pure functions. Amounts in cents: positive = money in, negative = money out.
+var Bank = (function () {
+  var MON = { jan: 0, feb: 1, mar: 2, apr: 3, may: 4, jun: 5, jul: 6, aug: 7, sep: 8, oct: 9, nov: 10, dec: 11 };
+  function parseDate(v) {
+    if (v == null) return null;
+    var s = String(v).trim(), m;
+    if (!s) return null;
+    if ((m = s.match(/^(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{2,4})/))) { var y = +m[3]; if (y < 100) y += 2000; return Date.UTC(y, +m[2] - 1, +m[1]); }
+    if ((m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/))) return Date.UTC(+m[1], +m[2] - 1, +m[3]);
+    if ((m = s.match(/^(\d{1,2})[\s\-]([A-Za-z]{3})[A-Za-z]*[\s\-,]+(\d{2,4})$/))) {
+      var mo = MON[m[2].toLowerCase()]; if (mo == null) return null; var yy = +m[3]; if (yy < 100) yy += 2000; return Date.UTC(yy, mo, +m[1]);
+    }
+    if (/^\d{5}(\.\d+)?$/.test(s)) { var n = Math.floor(+s); if (n > 30000 && n < 80000) return Date.UTC(1899, 11, 30) + n * 864e5; }
+    return null;
+  }
+  function parseAmount(v) {
+    if (v == null) return null;
+    var s = String(v).trim(); if (!s) return null;
+    var neg = false;
+    if (/^\(.*\)$/.test(s)) { neg = true; s = s.slice(1, -1); }
+    if (/(dr|-)$/i.test(s)) { neg = !neg; s = s.replace(/(dr|-)$/i, ""); }
+    s = s.replace(/[^0-9.\-]/g, "");
+    if (!s || s === "-" || s === ".") return null;
+    var n = parseFloat(s); if (isNaN(n)) return null;
+    var c = Math.round(n * 100); return neg ? -c : c;
+  }
+  function csvLine(l) {
+    var out = [], cur = "", q = false;
+    for (var i = 0; i < l.length; i++) {
+      var ch = l[i];
+      if (q) { if (ch === '"') { if (l[i + 1] === '"') { cur += '"'; i++; } else q = false; } else cur += ch; }
+      else if (ch === '"') q = true; else if (ch === ",") { out.push(cur); cur = ""; } else cur += ch;
+    }
+    out.push(cur); return out;
+  }
+  function splitRows(text) {
+    var lines = String(text).replace(/\r/g, "").split("\n").filter(function (l) { return l.trim() !== ""; });
+    if (!lines.length) return [];
+    var tab = lines[0].indexOf("\t") >= 0;
+    return lines.map(function (l) { return tab ? l.split("\t") : csvLine(l); });
+  }
+  var HEAD = {
+    date: /^(date|value date|transaction date|posting date|trans date)/i,
+    bank: /^(bank|account|bank account|gl account)$/i,
+    ref: /^(ref|reference|cheque|chq|doc|document|doc no|number|no\.?)/i,
+    desc: /(narration|description|details|particulars|memo)/i,
+    debit: /^(debit|dr|debits|withdrawals?|money out|payments?)$/i,
+    credit: /^(credit|cr|credits|deposits?|money in|receipts?)$/i,
+    amount: /^(amount|value|amt)/i
+  };
+  function mapColumns(h) {
+    var map = {};
+    h.forEach(function (x, i) {
+      var t = String(x || "").trim();
+      ["date", "debit", "credit", "amount", "desc", "bank", "ref"].forEach(function (k) {
+        if (map[k] == null && HEAD[k].test(t) && Object.keys(map).every(function (o) { return map[o] !== i; })) map[k] = i;
+      });
+    });
+    return map;
+  }
+  // side "B": bank statement (credit = money in). side "L": cash book (debit = money in).
+  function parseSide(text, side) {
+    var rows = splitRows(text), warnings = [], out = [];
+    if (!rows.length) return { rows: [], warnings: [], map: {} };
+    var map, start = 0;
+    if (parseDate(rows[0][0]) == null) { map = mapColumns(rows[0]); start = 1; }
+    else map = { date: 0, ref: 1, desc: 2, amount: 3 };
+    if (map.date == null) warnings.push("No Date column found.");
+    if (map.amount == null && map.debit == null && map.credit == null) warnings.push("No Amount, or Debit and Credit, columns found.");
+    for (var r = start; r < rows.length; r++) {
+      var row = rows[r], d = parseDate(row[map.date]), amt;
+      if (map.debit != null || map.credit != null) {
+        var dr = parseAmount(row[map.debit]) || 0, cr = parseAmount(row[map.credit]) || 0;
+        amt = (!dr && !cr) ? null : side === "B" ? cr - dr : dr - cr;
+      } else amt = parseAmount(row[map.amount]);
+      var desc = map.desc != null ? String(row[map.desc] || "").trim() : "";
+      if (/opening balance|balance b\/f|brought forward|closing balance/i.test(desc)) continue;
+      if (d == null || amt == null) { if (row.join("").trim()) warnings.push("Skipped line " + (r + 1) + ": date or amount not readable."); continue; }
+      out.push({ side: side, line: r + 1, date: d, amt: amt, desc: desc,
+        ref: map.ref != null ? String(row[map.ref] || "").trim() : "", bank: map.bank != null ? String(row[map.bank] || "").trim() : "" });
+    }
+    return { rows: out, warnings: warnings, map: map };
+  }
+
+  var CATS = {
+    MATCHED:  { label: "Matched", sev: "ok", action: "" },
+    DATE:     { label: "Date differs", sev: "warn", action: "Same amount within a few days. Check the posting date." },
+    TRANSPOSE:{ label: "Transposed amount", sev: "crit", action: "Digits swapped when keying. Correct the cash book." },
+    DUP:      { label: "Duplicate posting", sev: "crit", action: "Reverse the duplicate in the cash book." },
+    CHARGES:  { label: "Bank charges or interest", sev: "warn", action: "Post the charge or interest to the cash book." },
+    B_ONLY:   { label: "Not in cash book", sev: "crit", action: "Identify the item and post it to the cash book." },
+    B_TIMING: { label: "Timing: post next period", sev: "info", action: "Received at period end. Should appear in next period's cash book." },
+    L_TIMING: { label: "Outstanding at period end", sev: "info", action: "Unpresented cheque or deposit in transit. Should clear on the next statement." },
+    L_ONLY:   { label: "Not in bank", sev: "crit", action: "Check for a rejected payment, wrong bank account or keying error." }
+  };
+  var CHARGE_RX = /(fee|charge|commission|interest|levy|tax|ledger fee|service)/i;
+  function sameDigits(a, b) { a = String(Math.abs(a)); b = String(Math.abs(b)); return a.length === b.length && a.split("").sort().join("") === b.split("").sort().join(""); }
+
+  function run(B, L, opts) {
+    opts = opts || {};
+    var lWin = (opts.ledgerDays == null ? 5 : opts.ledgerDays) * 864e5, bWin = (opts.bankDays == null ? 1 : opts.bankDays) * 864e5;
+    var dWin = (opts.dateDays == null ? 3 : opts.dateDays) * 864e5;
+    var all = B.concat(L).map(function (r, i) { var o = Object.assign({}, r); o.id = i; o.g = null; return o; });
+    var bank = all.filter(function (r) { return r.side === "B"; }), led = all.filter(function (r) { return r.side === "L"; });
+    var end = bank.concat(led).reduce(function (m, r) { return Math.max(m, r.date); }, 0);
+    var groups = [];
+    function grp(cat, rows, note) {
+      var g = { cat: cat, rows: rows, note: note || "" }; rows.forEach(function (r) { r.g = g; });
+      g.b = rows.filter(function (r) { return r.side === "B"; }).reduce(function (a, r) { return a + r.amt; }, 0);
+      g.l = rows.filter(function (r) { return r.side === "L"; }).reduce(function (a, r) { return a + r.amt; }, 0);
+      g.diff = g.b - g.l; groups.push(g); return g;
+    }
+    var free = function (r) { return !r.g; };
+
+    // 1. Exact matches on date + amount, in order of appearance; extra cash book lines = duplicates.
+    var bk = {};
+    all.forEach(function (r) { var k = r.date + "|" + r.amt; (bk[k] = bk[k] || { B: [], L: [] })[r.side].push(r); });
+    Object.keys(bk).forEach(function (k) {
+      var x = bk[k], n = Math.min(x.B.length, x.L.length);
+      for (var i = 0; i < n; i++) grp("MATCHED", [x.B[i], x.L[i]]);
+      if (x.B.length) x.L.slice(n).forEach(function (r) { grp("DUP", [r], "The bank shows this date and amount " + x.B.length + " time(s); the cash book has it " + x.L.length + " times."); });
+    });
+
+    // 2. Same amount, date a few days apart.
+    bank.filter(free).forEach(function (b) {
+      var best = null;
+      led.forEach(function (l) { if (!l.g && l.amt === b.amt && Math.abs(l.date - b.date) <= dWin && (!best || Math.abs(l.date - b.date) < Math.abs(best.date - b.date))) best = l; });
+      if (best) grp("DATE", [b, best], "Bank " + fmtDate(b.date) + ", cash book " + fmtDate(best.date) + ".");
+    });
+
+    // 3. Same date, digits transposed (difference divisible by 9).
+    bank.filter(free).forEach(function (b) {
+      var hit = led.filter(function (l) { return !l.g && l.date === b.date && l.amt !== b.amt && (b.amt > 0) === (l.amt > 0) && sameDigits(b.amt, l.amt) && (b.amt - l.amt) % 900 === 0; })[0];
+      if (hit) grp("TRANSPOSE", [b, hit], "Bank " + fmt(b.amt) + ", cash book " + fmt(hit.amt) + ". Difference " + fmt(b.amt - hit.amt) + " is divisible by 9.");
+    });
+
+    // 4. What is left on each side.
+    bank.filter(free).forEach(function (b) {
+      if (CHARGE_RX.test(b.desc + " " + b.ref)) grp("CHARGES", [b]);
+      else grp(b.date >= end - bWin + 864e5 - 1 ? "B_TIMING" : "B_ONLY", [b]);
+    });
+    led.filter(free).forEach(function (l) { grp(l.date > end - lWin ? "L_TIMING" : "L_ONLY", [l]); });
+
+    groups.forEach(function (g) {
+      var c = CATS[g.cat]; g.label = c.label; g.sev = c.sev; g.action = c.action;
+      g.date = Math.min.apply(null, g.rows.map(function (r) { return r.date; }));
+    });
+    groups.sort(function (a, b) { return a.date - b.date; });
+    var bT = bank.reduce(function (a, r) { return a + r.amt; }, 0), lT = led.reduce(function (a, r) { return a + r.amt; }, 0);
+    var oB = opts.openB || 0, oL = opts.openL || 0, byCat = {};
+    groups.forEach(function (g) { var c = byCat[g.cat] = byCat[g.cat] || { cat: g.cat, label: g.label, sev: g.sev, count: 0, effect: 0 }; c.count++; c.effect += g.diff; });
+    var explained = Object.keys(byCat).reduce(function (a, k) { return a + byCat[k].effect; }, 0) + (oB - oL);
+    var diff = (oB + bT) - (oL + lT);
+    return { groups: groups, byCat: byCat, end: end, bankBal: oB + bT, ledBal: oL + lT, openB: oB, openL: oL, diff: diff, unexplained: diff - explained,
+      counts: { B: bank.length, L: led.length }, matched: groups.filter(function (g) { return g.sev === "ok"; }).length,
+      matchedValue: groups.filter(function (g) { return g.cat === "MATCHED"; }).reduce(function (a, g) { return a + g.b; }, 0) };
+  }
+  function fmt(c) { var s = (Math.abs(c) / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }); return c < 0 ? "(" + s + ")" : s; }
+  function fmtDate(t) { if (t == null) return ""; var d = new Date(t); return ("0" + d.getUTCDate()).slice(-2) + "/" + ("0" + (d.getUTCMonth() + 1)).slice(-2) + "/" + d.getUTCFullYear(); }
+  return { parseSide: parseSide, run: run, fmt: fmt, fmtDate: fmtDate, parseAmount: parseAmount, CATS: CATS };
+})();
+if (typeof module !== "undefined") module.exports = Bank;
+
+var SAMPLE={"bank": "Bank\tDate\tReference\tNarration\tAmount\nNorthgate Bank\t01/09/2026\tSO0901\tSTANDING ORDER RENT WAREHOUSE\t-6500.00\nUnity Commercial Bank\t01/09/2026\tPOS0109\tPOS SETTLEMENT MERCHANT 40217 01/09\t4293.51\nNorthgate Bank\t02/09/2026\tEFT021043\tEFT CR CUST1043 INV PAYMENT\t4325.78\nUnity Commercial Bank\t02/09/2026\tPOS0209\tPOS SETTLEMENT MERCHANT 40217 02/09\t2961.54\nNorthgate Bank\t03/09/2026\tPAY032011\tEFT DR SUPP2011 PAYMENT\t-6913.22\nUnity Commercial Bank\t03/09/2026\tPOS0309\tPOS SETTLEMENT MERCHANT 40217 03/09\t6812.20\nNorthgate Bank\t04/09/2026\tEFT041051\tEFT CR CUST1051 INV PAYMENT\t7281.47\nUnity Commercial Bank\t04/09/2026\tPOS0409\tPOS SETTLEMENT MERCHANT 40217 04/09\t2357.76\nNorthgate Bank\t05/09/2026\tSWP0509\tSWEEP FROM COLLECTIONS ACCOUNT\t26915.69\nUnity Commercial Bank\t05/09/2026\tPOS0509\tPOS SETTLEMENT MERCHANT 40217 05/09\t5926.29\nUnity Commercial Bank\t05/09/2026\tSWP0509\tSWEEP TO MAIN ACCOUNT\t-26915.69\nNorthgate Bank\t07/09/2026\tEFT071067\tEFT CR CUST1067 INV PAYMENT\t15149.96\nUnity Commercial Bank\t07/09/2026\tPOS0709\tPOS SETTLEMENT MERCHANT 40217 07/09\t4615.80\nNorthgate Bank\t08/09/2026\tPAY082017\tEFT DR SUPP2017 PAYMENT\t-15927.60\nUnity Commercial Bank\t08/09/2026\tPOS0809\tPOS SETTLEMENT MERCHANT 40217 08/09\t2246.59\nNorthgate Bank\t09/09/2026\tEFT091072\tEFT CR CUST1072 INV PAYMENT\t5301.26\nUnity Commercial Bank\t09/09/2026\tPOS0909\tPOS SETTLEMENT MERCHANT 40217 09/09\t5707.26\nNorthgate Bank\t10/09/2026\tPAY102024\tEFT DR SUPP2024 PAYMENT\t-11124.25\nUnity Commercial Bank\t10/09/2026\tPOS1009\tPOS SETTLEMENT MERCHANT 40217 10/09\t2088.72\nNorthgate Bank\t11/09/2026\tELEC1109\tPREPAID ELECTRICITY\t-1236.80\nUnity Commercial Bank\t11/09/2026\tPOS1109\tPOS SETTLEMENT MERCHANT 40217 11/09\t5139.07\nNorthgate Bank\t12/09/2026\tEFT121160\tEFT CR CUST1160 INV PAYMENT\t3960.00\nNorthgate Bank\t12/09/2026\tSWP1209\tSWEEP FROM COLLECTIONS ACCOUNT\t25484.92\nUnity Commercial Bank\t12/09/2026\tPOS1209\tPOS SETTLEMENT MERCHANT 40217 12/09\t2337.89\nUnity Commercial Bank\t12/09/2026\tSWP1209\tSWEEP TO MAIN ACCOUNT\t-25484.92\nNorthgate Bank\t14/09/2026\tEFT141088\tEFT CR CUST1088 INV PAYMENT\t11514.80\nUnity Commercial Bank\t14/09/2026\tPOS1409\tPOS SETTLEMENT MERCHANT 40217 14/09\t2498.49\nNorthgate Bank\t15/09/2026\tPAY152090\tEFT DR SUPP2090 PAYMENT\t-12540.00\nUnity Commercial Bank\t15/09/2026\tPOS1509\tPOS SETTLEMENT MERCHANT 40217 15/09\t5068.80\nNorthgate Bank\t16/09/2026\tEFT161094\tEFT CR CUST1094 INV PAYMENT\t12403.16\nUnity Commercial Bank\t16/09/2026\tPOS1609\tPOS SETTLEMENT MERCHANT 40217 16/09\t8166.76\nNorthgate Bank\t17/09/2026\tPAY172036\tEFT DR SUPP2036 PAYMENT\t-8968.80\nUnity Commercial Bank\t17/09/2026\tPOS1709\tPOS SETTLEMENT MERCHANT 40217 17/09\t2753.28\nNorthgate Bank\t18/09/2026\tTEL1809\tTELECOMS DEBIT ORDER\t-412.35\nUnity Commercial Bank\t18/09/2026\tPOS1809\tPOS SETTLEMENT MERCHANT 40217 18/09\t3518.94\nNorthgate Bank\t19/09/2026\tEFT191103\tEFT CR CUST1103 INV PAYMENT\t8272.16\nNorthgate Bank\t19/09/2026\tSWP1909\tSWEEP FROM COLLECTIONS ACCOUNT\t18661.45\nUnity Commercial Bank\t19/09/2026\tPOS1909\tPOS SETTLEMENT MERCHANT 40217 19/09\t6631.24\nUnity Commercial Bank\t19/09/2026\tSWP1909\tSWEEP TO MAIN ACCOUNT\t-18661.45\nNorthgate Bank\t21/09/2026\tEFT211119\tEFT CR CUST1119 INV PAYMENT\t10990.04\nUnity Commercial Bank\t21/09/2026\tPOS2109\tPOS SETTLEMENT MERCHANT 40217 21/09\t9097.36\nNorthgate Bank\t22/09/2026\tPAY222042\tEFT DR SUPP2042 PAYMENT\t-14125.68\nUnity Commercial Bank\t22/09/2026\tEFT220931\tEFT CR UNREFERENCED DEPOSIT\t1850.00\nUnity Commercial Bank\t22/09/2026\tPOS2209\tPOS SETTLEMENT MERCHANT 40217 22/09\t6243.69\nNorthgate Bank\t23/09/2026\tPAY232058\tEFT DR SUPP2058 PAYMENT\t-11610.50\nUnity Commercial Bank\t23/09/2026\tPOS2309\tPOS SETTLEMENT MERCHANT 40217 23/09\t4854.44\nNorthgate Bank\t24/09/2026\tEFT241125\tEFT CR CUST1125 INV PAYMENT\t3473.23\nUnity Commercial Bank\t24/09/2026\tPOS2409\tPOS SETTLEMENT MERCHANT 40217 24/09\t9317.16\nNorthgate Bank\t25/09/2026\tSAL2509\tSALARIES BATCH 09\t-21480.00\nUnity Commercial Bank\t25/09/2026\tPOS2509\tPOS SETTLEMENT MERCHANT 40217 25/09\t2158.69\nNorthgate Bank\t26/09/2026\tSWP2609\tSWEEP FROM COLLECTIONS ACCOUNT\t23616.36\nUnity Commercial Bank\t26/09/2026\tPOS2609\tPOS SETTLEMENT MERCHANT 40217 26/09\t8410.21\nUnity Commercial Bank\t26/09/2026\tSWP2609\tSWEEP TO MAIN ACCOUNT\t-23616.36\nNorthgate Bank\t28/09/2026\tCHG2809\tMONTHLY SERVICE FEE\t-45.50\nNorthgate Bank\t28/09/2026\tEFT281137\tEFT CR CUST1137 INV PAYMENT\t3423.82\nUnity Commercial Bank\t28/09/2026\tPOS2809\tPOS SETTLEMENT MERCHANT 40217 28/09\t4029.99\nNorthgate Bank\t29/09/2026\tPAY292063\tEFT DR SUPP2063 PAYMENT\t-8695.57\nUnity Commercial Bank\t29/09/2026\tPOS2909\tPOS SETTLEMENT MERCHANT 40217 29/09\t2910.76\nNorthgate Bank\t30/09/2026\tINT3009\tCREDIT INTEREST\t12.37\nUnity Commercial Bank\t30/09/2026\tPOS3009\tPOS SETTLEMENT MERCHANT 40217 30/09\t2735.40", "ledger": "Date\tAccount\tReference\tNarration\tAmount\n01/09/2026\t1110 Unity Bank - Collections\tCB0001\tPOS takings\t4293.51\n01/09/2026\t1100 Northgate Bank - Main\tCB0002\tRent - September\t-6500.00\n02/09/2026\t1110 Unity Bank - Collections\tCB0003\tPOS takings\t2961.54\n02/09/2026\t1100 Northgate Bank - Main\tCB0004\tReceipt - customer 1043\t4325.78\n03/09/2026\t1110 Unity Bank - Collections\tCB0005\tPOS takings\t6812.20\n03/09/2026\t1100 Northgate Bank - Main\tCB0006\tPayment - supplier 2011\t-6913.22\n04/09/2026\t1110 Unity Bank - Collections\tCB0007\tPOS takings\t2357.76\n04/09/2026\t1100 Northgate Bank - Main\tCB0008\tReceipt - customer 1051\t7281.47\n05/09/2026\t1110 Unity Bank - Collections\tCB0009\tPOS takings\t5926.29\n05/09/2026\t1110 Unity Bank - Collections\tCB0010\tTransfer to main account\t-26915.69\n05/09/2026\t1100 Northgate Bank - Main\tCB0011\tTransfer from collections\t26915.69\n07/09/2026\t1110 Unity Bank - Collections\tCB0012\tPOS takings\t4615.80\n07/09/2026\t1100 Northgate Bank - Main\tCB0013\tReceipt - customer 1067\t15149.96\n08/09/2026\t1110 Unity Bank - Collections\tCB0014\tPOS takings\t2246.59\n08/09/2026\t1100 Northgate Bank - Main\tCB0015\tPayment - supplier 2017\t-15927.60\n09/09/2026\t1110 Unity Bank - Collections\tCB0016\tPOS takings\t5707.26\n09/09/2026\t1100 Northgate Bank - Main\tCB0017\tReceipt - customer 1072\t5301.26\n10/09/2026\t1110 Unity Bank - Collections\tCB0018\tPOS takings\t2088.72\n10/09/2026\t1100 Northgate Bank - Main\tCB0019\tPayment - supplier 2024\t-11124.25\n11/09/2026\t1110 Unity Bank - Collections\tCB0020\tPOS takings\t5139.07\n11/09/2026\t1100 Northgate Bank - Main\tCB0021\tElectricity\t-1236.80\n12/09/2026\t1110 Unity Bank - Collections\tCB0022\tPOS takings\t2337.89\n12/09/2026\t1110 Unity Bank - Collections\tCB0023\tTransfer to main account\t-25484.92\n12/09/2026\t1100 Northgate Bank - Main\tCB0024\tTransfer from collections\t25484.92\n12/09/2026\t1100 Northgate Bank - Main\tCB0025\tReceipt - customer 1160\t3960.00\n12/09/2026\t1100 Northgate Bank - Main\tCB0026\tReceipt - customer 1160\t3960.00\n14/09/2026\t1110 Unity Bank - Collections\tCB0027\tPOS takings\t2498.49\n14/09/2026\t1100 Northgate Bank - Main\tCB0028\tReceipt - customer 1088\t11514.80\n15/09/2026\t1110 Unity Bank - Collections\tCB0029\tPOS takings\t5068.80\n15/09/2026\t1100 Northgate Bank - Main\tCB0030\tPayment - supplier 2090\t-12450.00\n16/09/2026\t1110 Unity Bank - Collections\tCB0031\tPOS takings\t8166.76\n16/09/2026\t1100 Northgate Bank - Main\tCB0032\tReceipt - customer 1094\t12403.16\n17/09/2026\t1110 Unity Bank - Collections\tCB0033\tPOS takings\t2753.28\n17/09/2026\t1100 Northgate Bank - Main\tCB0034\tPayment - supplier 2036\t-8968.80\n18/09/2026\t1110 Unity Bank - Collections\tCB0035\tPOS takings\t3518.94\n18/09/2026\t1100 Northgate Bank - Main\tCB0036\tTelephone and data\t-412.35\n18/09/2026\t1100 Northgate Bank - Main\tCB0037\tPayment - supplier 2083\t-1275.00\n19/09/2026\t1110 Unity Bank - Collections\tCB0038\tPOS takings\t6631.24\n19/09/2026\t1100 Northgate Bank - Main\tCB0039\tReceipt - customer 1103\t8272.16\n19/09/2026\t1110 Unity Bank - Collections\tCB0040\tTransfer to main account\t-18661.45\n19/09/2026\t1100 Northgate Bank - Main\tCB0041\tTransfer from collections\t18661.45\n21/09/2026\t1110 Unity Bank - Collections\tCB0042\tPOS takings\t9097.36\n21/09/2026\t1100 Northgate Bank - Main\tCB0043\tReceipt - customer 1119\t10990.04\n22/09/2026\t1110 Unity Bank - Collections\tCB0044\tPOS takings\t6243.69\n22/09/2026\t1100 Northgate Bank - Main\tCB0045\tPayment - supplier 2042\t-14125.68\n23/09/2026\t1110 Unity Bank - Collections\tCB0046\tPOS takings\t4854.44\n23/09/2026\t1100 Northgate Bank - Main\tCB0047\tPayment - supplier 2058\t-11610.50\n24/09/2026\t1110 Unity Bank - Collections\tCB0048\tPOS takings\t9317.16\n24/09/2026\t1100 Northgate Bank - Main\tCB0049\tReceipt - customer 1125\t3473.23\n25/09/2026\t1110 Unity Bank - Collections\tCB0050\tPOS takings\t2158.69\n25/09/2026\t1100 Northgate Bank - Main\tCB0051\tSalaries - September\t-21480.00\n26/09/2026\t1110 Unity Bank - Collections\tCB0052\tPOS takings\t8410.21\n26/09/2026\t1110 Unity Bank - Collections\tCB0053\tTransfer to main account\t-23616.36\n26/09/2026\t1100 Northgate Bank - Main\tCB0054\tTransfer from collections\t23616.36\n26/09/2026\t1100 Northgate Bank - Main\tCB0055\tPayment - supplier 2071 CHQ 000418\t-4200.00\n28/09/2026\t1110 Unity Bank - Collections\tCB0056\tPOS takings\t4029.99\n28/09/2026\t1100 Northgate Bank - Main\tCB0057\tReceipt - customer 1137\t3423.82\n29/09/2026\t1110 Unity Bank - Collections\tCB0058\tPOS takings\t2910.76\n29/09/2026\t1100 Northgate Bank - Main\tCB0059\tPayment - supplier 2063\t-8695.57\n30/09/2026\t1110 Unity Bank - Collections\tCB0060\tCash deposit - till float surplus\t6480.00", "openB": "48,250.00", "openL": "48,250.00"};
+if(typeof module!=="undefined")module.exports=SAMPLE;
+(function () {
+  var $ = function (id) { return document.getElementById(id); };
+  var state = { res: null, filter: "EXC" };
+  var esc = function (s) { return String(s == null ? "" : s).replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }); };
+  var F = Bank.fmt, FD = Bank.fmtDate;
+  var COLS = { date: "Date", bank: "Bank", ref: "Reference", desc: "Narration", amount: "Amount", debit: "Debit", credit: "Credit" };
+
+  function detectLine(p, el, text) {
+    var found = Object.keys(p.map).map(function (k) { return COLS[k]; }).join(", ");
+    var msg = p.rows.length + " lines read" + (found ? ". Columns: " + found : "") + ".";
+    if (p.warnings.length) msg += " " + p.warnings.slice(0, 2).join(" ") + (p.warnings.length > 2 ? " (+" + (p.warnings.length - 2) + " more)" : "");
+    el.textContent = text.trim() ? msg : "";
+    el.className = "detect" + (p.warnings.length ? " bad" : "");
+  }
+
+  function run() {
+    var pb = Bank.parseSide($("bankIn").value, "B"), pl = Bank.parseSide($("ledIn").value, "L");
+    detectLine(pb, $("bankDetect"), $("bankIn").value); detectLine(pl, $("ledDetect"), $("ledIn").value);
+    state.res = Bank.run(pb.rows, pl.rows, {
+      openB: Bank.parseAmount($("openB").value) || 0, openL: Bank.parseAmount($("openL").value) || 0,
+      ledgerDays: +$("ledgerDays").value || 0, dateDays: +$("dateDays").value || 0
+    });
+    state.filter = "EXC"; render();
+  }
+
+  function render() {
+    var r = state.res, any = r.counts.B + r.counts.L;
+    $("tBank").textContent = F(r.bankBal); $("tLed").textContent = F(r.ledBal); $("tDiff").textContent = F(r.diff);
+    $("tRes").textContent = any ? (r.unexplained === 0 ? F(0) + "  Reconciled" : F(r.unexplained)) : F(0);
+    $("tResBox").className = "tile result" + (r.unexplained ? " off" : "");
+    var exc = r.groups.filter(function (g) { return g.sev !== "ok"; }).length;
+    $("countLine").textContent = any ? r.counts.B + " bank lines and " + r.counts.L + " cash book lines. " + r.matched + " matched, worth " + F(r.matchedValue) + " net. " + exc + " exception" + (exc === 1 ? "" : "s") + "." : "";
+
+    var cats = Object.keys(r.byCat).map(function (k) { return r.byCat[k]; });
+    var adj = cats.filter(function (c) { return c.effect !== 0; }).sort(function (a, b) { return Math.abs(b.effect) - Math.abs(a.effect); });
+    var h = '<tr><td>Balance per bank statement</td><td class="n">' + F(r.bankBal) + "</td></tr>";
+    if (r.openB !== r.openL) h += '<tr class="adj"><td>Opening balance difference</td><td class="n">' + F(-(r.openB - r.openL)) + "</td></tr>";
+    if (adj.length) h += '<tr class="sub"><td colspan="2">Adjust for</td></tr>';
+    adj.forEach(function (c) { h += '<tr class="adj"><td>' + esc(c.label) + " (" + c.count + ')</td><td class="n">' + F(-c.effect) + "</td></tr>"; });
+    h += '<tr class="total"><td>Balance per cash book</td><td class="n">' + F(r.ledBal) + "</td></tr>";
+    h += '<tr><td>Unexplained difference</td><td class="n">' + F(r.unexplained) + "</td></tr>";
+    $("stmtTable").innerHTML = h;
+
+    var order = { crit: 0, warn: 1, info: 2, ok: 3 };
+    cats.sort(function (a, b) { return order[a.sev] - order[b.sev] || b.count - a.count; });
+    $("cats").innerHTML = cats.map(function (c) {
+      return '<button type="button" class="cat sev-' + c.sev + '" data-f="' + c.cat + '" aria-pressed="' + (state.filter === c.cat) + '"><i></i><span>' + esc(c.label) + '</span><span class="c">' + c.count + '</span><span class="a">' + F(c.effect) + "</span></button>";
+    }).join("") || '<p class="empty">Paste or open both files, then select Reconcile.</p>';
+
+    var chips = [["EXC", "Exceptions", exc], ["OK", "Matched", r.groups.length - exc], ["ALL", "All lines", r.groups.length]];
+    $("chips").innerHTML = chips.map(function (c) { return '<button type="button" class="chip" data-f="' + c[0] + '" aria-pressed="' + (state.filter === c[0]) + '">' + c[1] + " (" + c[2] + ")</button>"; }).join("");
+    renderRows();
+  }
+
+  function visible() {
+    var f = state.filter;
+    return state.res.groups.filter(function (g) { return f === "ALL" || (f === "EXC" ? g.sev !== "ok" : f === "OK" ? g.sev === "ok" : g.cat === f); });
+  }
+  function side(g, s, key) { return g.rows.filter(function (x) { return x.side === s; }).map(function (x) { return x[key]; }); }
+  function narration(g) { return side(g, "B", "desc")[0] || side(g, "L", "desc")[0] || ""; }
+
+  function renderRows() {
+    var list = visible();
+    $("rows").innerHTML = list.length ? list.map(function (g) {
+      var hasB = side(g, "B", "ref").length, hasL = side(g, "L", "ref").length;
+      return '<tr><td><span class="pill sev-' + g.sev + '">' + esc(g.label) + "</span></td><td>" + FD(g.date) + '</td><td class="ref">' + esc(side(g, "B", "ref").join(", ")) +
+        '</td><td class="ref">' + esc(side(g, "L", "ref").join(", ")) + '</td><td class="desc">' + esc(narration(g)) + (g.note ? '<span class="note">' + esc(g.note) + "</span>" : "") +
+        '</td><td class="n">' + (hasB ? F(g.b) : "") + '</td><td class="n">' + (hasL ? F(g.l) : "") + '</td><td class="n' + (g.diff ? " diffpos" : "") + '">' + F(g.diff) + '</td><td class="todo">' + esc(g.action) + "</td></tr>";
+    }).join("") : '<tr><td colspan="9" class="empty">No lines in this view.</td></tr>';
+  }
+
+  document.addEventListener("click", function (e) {
+    var b = e.target.closest("[data-f]");
+    if (b) { state.filter = state.filter === b.dataset.f && b.classList.contains("cat") ? "EXC" : b.dataset.f; render(); }
+  });
+
+  function loadSample() {
+    $("bankIn").value = SAMPLE.bank; $("ledIn").value = SAMPLE.ledger; $("openB").value = SAMPLE.openB; $("openL").value = SAMPLE.openL;
+    $("srcBadge").textContent = "Sample data loaded"; run();
+  }
+  $("sampleBtn").addEventListener("click", loadSample);
+  $("runBtn").addEventListener("click", function () { $("srcBadge").textContent = "Your data"; run(); });
+  $("clearBtn").addEventListener("click", function () { ["bankIn", "ledIn", "openB", "openL"].forEach(function (id) { $(id).value = ""; }); $("srcBadge").textContent = "No data"; run(); });
+  $("ledgerDays").addEventListener("change", run); $("dateDays").addEventListener("change", run);
+
+  function readFile(input, target) {
+    var f = input.files && input.files[0]; if (!f) return;
+    var rd = new FileReader(), det = target === "bankIn" ? "bankDetect" : "ledDetect";
+    if (/\.xlsx?$/i.test(f.name)) {
+      rd.onload = function () {
+        try {
+          if (typeof XLSX === "undefined") throw new Error("no reader");
+          var wb = XLSX.read(new Uint8Array(rd.result), { type: "array" });
+          var rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, raw: true, defval: "" });
+          $(target).value = rows.map(function (r) { return r.join("\t"); }).join("\n"); $("srcBadge").textContent = "Your data"; run();
+        } catch (err) { $(det).textContent = "Could not read that workbook. Save it as CSV and try again."; $(det).className = "detect bad"; }
+      };
+      rd.readAsArrayBuffer(f);
+    } else { rd.onload = function () { $(target).value = rd.result; $("srcBadge").textContent = "Your data"; run(); }; rd.readAsText(f); }
+    input.value = "";
+  }
+  $("bankFile").addEventListener("change", function () { readFile(this, "bankIn"); });
+  $("ledFile").addEventListener("change", function () { readFile(this, "ledIn"); });
+
+  function tableRows() {
+    var n = function (c) { return Math.round(c) / 100; };
+    return [["Status", "Date", "Bank ref", "Cash book ref", "Narration", "Note", "Bank", "Cash book", "Difference", "Next step"]].concat(state.res.groups.map(function (g) {
+      return [g.label, FD(g.date), side(g, "B", "ref").join(", "), side(g, "L", "ref").join(", "), narration(g), g.note,
+        side(g, "B", "ref").length ? n(g.b) : "", side(g, "L", "ref").length ? n(g.l) : "", n(g.diff), g.action];
+    }));
+  }
+  function toast(t) { $("toast").textContent = t; setTimeout(function () { $("toast").textContent = ""; }, 3000); }
+
+  $("xlsxBtn").addEventListener("click", function () {
+    try {
+      if (typeof XLSX === "undefined") throw new Error("no library");
+      var r = state.res, wb = XLSX.utils.book_new();
+      var sum = [["Bank reconciliation", ""], ["Balance per bank statement", r.bankBal / 100]];
+      Object.keys(r.byCat).map(function (k) { return r.byCat[k]; }).filter(function (c) { return c.effect; }).forEach(function (c) { sum.push([c.label + " (" + c.count + ")", -c.effect / 100]); });
+      sum.push(["Balance per cash book", r.ledBal / 100], ["Unexplained difference", r.unexplained / 100]);
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(sum), "Summary");
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(tableRows()), "Lines");
+      XLSX.writeFile(wb, "Bank_Reconciliation_" + FD(r.end).replace(/\//g, "-") + ".xlsx");
+      toast("Excel file saved.");
+    } catch (e) { toast("Download was blocked here. Use Copy table and paste into Excel."); }
+  });
+
+  $("copyBtn").addEventListener("click", function () {
+    var text = tableRows().map(function (r) { return r.join("\t"); }).join("\n");
+    var done = function () { toast("Copied. Paste into Excel."); };
+    var fallback = function () { var ta = document.createElement("textarea"); ta.value = text; document.body.appendChild(ta); ta.select(); try { document.execCommand("copy"); done(); } catch (x) { toast("Copy was blocked by the browser."); } ta.remove(); };
+    try { navigator.clipboard.writeText(text).then(done, fallback); } catch (x) { fallback(); }
+  });
+
+  loadSample();
+})();
+</script>
+</body>
+</html>
